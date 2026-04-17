@@ -13,6 +13,9 @@ defmodule EvolvingMinds.Application do
       {Phoenix.PubSub, name: EvolvingMinds.PubSub},
       {Registry, keys: :unique, name: EvolvingMinds.EntityRegistry},
       EvolvingMinds.Memory,
+      EvolvingMinds.StateStore,
+      EvolvingMinds.GlobalEvents,
+      EvolvingMinds.Stats,
       {DynamicSupervisor, strategy: :one_for_one, name: EvolvingMinds.EntitySupervisor},
       EvolvingMinds.EvolutionEngine,
       # Start to serve requests, typically the last entry

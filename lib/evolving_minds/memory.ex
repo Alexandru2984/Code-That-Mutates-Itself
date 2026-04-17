@@ -26,4 +26,22 @@ defmodule EvolvingMinds.Memory do
       [] -> []
     end
   end
+
+  def get_top_interactions(limit \\ 5) do
+    :ets.tab2list(:entity_memories)
+    |> Enum.flat_map(fn {id, memories} ->
+      Enum.map(memories, fn {type, sender} ->
+        # Sort to treat (A->B) and (B->A) as the same connection if we want undirected,
+        # but let's keep it directed for now or just count pairs.
+        pair = Enum.sort([id, sender])
+        {pair, type}
+      end)
+    end)
+    |> Enum.group_by(fn {pair, _} -> pair end)
+    |> Enum.map(fn {pair, occurrences} ->
+      {pair, length(occurrences)}
+    end)
+    |> Enum.sort_by(fn {_, count} -> count end, :desc)
+    |> Enum.take(limit)
+  end
 end

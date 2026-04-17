@@ -2,37 +2,42 @@ defmodule EvolvingMindsWeb.WorldLive do
   use EvolvingMindsWeb, :live_view
 
   alias EvolvingMinds.World
-
   @impl true
   def mount(_params, _session, socket) do
     if connected?(socket), do: :timer.send_interval(500, :tick)
-    {:ok, assign(socket, entities: fetch_entities()), layout: {EvolvingMindsWeb.Layouts, :screen}}
+
+    socket =
+      socket
+      |> assign(entities: fetch_entities())
+      |> assign(global_events: EvolvingMinds.GlobalEvents.get_recent_events())
+      |> assign(stats: EvolvingMinds.Stats.get_history())
+      |> assign(top_interactions: EvolvingMinds.Memory.get_top_interactions())
+
+    {:ok, socket, layout: {EvolvingMindsWeb.Layouts, :screen}}
   end
 
-  @impl true
-  def handle_info(:tick, socket) do
-    {:noreply, assign(socket, entities: fetch_entities())}
-  end
+@impl true
+def handle_info(:tick, socket) do
+  {:noreply, 
+   socket 
+   |> assign(entities: fetch_entities())
+   |> assign(global_events: EvolvingMinds.GlobalEvents.get_recent_events())
+   |> assign(stats: EvolvingMinds.Stats.get_history())
+   |> assign(top_interactions: EvolvingMinds.Memory.get_top_interactions())
+  }
+end
+@impl true
+def handle_event("inject_energy", %{"id" => id}, socket) do
+  World.inject_energy(id)
+  {:noreply, assign(socket, entities: fetch_entities())}
+end
 
-  defp fetch_entities do
-    World.get_all_entities()
-    |> Enum.map(fn id ->
-      case Registry.lookup(EvolvingMinds.EntityRegistry, id) do
-        [{pid, _}] ->
-          try do
-            # Using sys.get_state for experimental debugging purposes
-            :sys.get_state(pid, 100)
-          rescue
-            _ -> nil
-          end
-        [] -> nil
-      end
-    end)
-    |> Enum.reject(&is_nil/1)
-  end
+defp fetch_entities do
+  EvolvingMinds.StateStore.get_all_states()
+end
 
-  @impl true
-  def render(assigns) do
+@impl true
+def render(assigns) do
     ~H"""
     <div class="min-h-screen w-full bg-[#050608] text-slate-300 font-sans selection:bg-cyan-500/30 flex flex-col">
       <!-- Fixed Header for better UX on long lists -->
@@ -66,9 +71,10 @@ defmodule EvolvingMindsWeb.WorldLive do
       </header>
 
       <!-- Full-Width Main Content -->
-      <main class="flex-1 w-full px-4 py-8 md:px-8">
-        <div class="max-w-[2400px] mx-auto">
-          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 3xl:grid-cols-6 4xl:grid-cols-8 gap-6">
+      <main class="flex-1 w-full px-4 py-8 md:px-8 overflow-hidden flex flex-col lg:flex-row gap-8">
+        <!-- Main Simulation Grid -->
+        <div class="flex-1 overflow-auto custom-scrollbar-none">
+          <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6">
             <%= for entity <- @entities do %>
               <div class="group relative bg-slate-900/20 backdrop-blur-xl border border-white/5 rounded-[2rem] p-1 transition-all duration-500 hover:scale-[1.01] hover:border-cyan-500/30">
                 <div class="bg-[#0b0d15]/95 rounded-[1.8rem] p-5 h-full flex flex-col border border-white/[0.02]">
@@ -86,11 +92,9 @@ defmodule EvolvingMindsWeb.WorldLive do
                       </div>
                     </div>
                     
-                    <div class="bg-black/40 rounded-xl px-2.5 py-1.5 border border-white/5 backdrop-blur-md min-w-[50px]">
-                      <span class={"text-xs font-mono font-black block text-center #{if entity.energy > 50, do: "text-cyan-400", else: "text-orange-400"}"}>
-                        <%= entity.energy %>%
-                      </span>
-                    </div>
+                    <button phx-click="inject_energy" phx-value-id={entity.id} class="group/btn relative px-3 py-1.5 rounded-xl border border-cyan-500/30 bg-cyan-500/5 hover:bg-cyan-500/20 transition-all duration-300">
+                      <span class="text-[9px] font-black text-cyan-400 uppercase tracking-widest">+ Energy</span>
+                    </button>
                   </div>
 
                   <!-- Traits Section -->
@@ -116,13 +120,24 @@ defmodule EvolvingMindsWeb.WorldLive do
                     </div>
                   </div>
 
-                  <!-- Behavior Source (Minimized but interactive) -->
+                  <!-- Energy Bar -->
+                  <div class="mb-5">
+                    <div class="flex justify-between items-center mb-1.5">
+                      <span class="text-[8px] uppercase tracking-widest text-slate-500 font-bold">Vitality</span>
+                      <span class={"text-[9px] font-mono font-bold #{if entity.energy > 50, do: "text-cyan-400", else: "text-orange-400"}"}><%= entity.energy %>%</span>
+                    </div>
+                    <div class="h-1.5 w-full bg-black/40 rounded-full overflow-hidden border border-white/5">
+                      <div class={"h-full transition-all duration-1000 #{if entity.energy > 50, do: "bg-cyan-500", else: "bg-orange-500"}"} style={"width: #{entity.energy}%"}></div>
+                    </div>
+                  </div>
+
+                  <!-- Behavior Source (Minimized) -->
                   <div class="mb-5 flex-1 flex flex-col min-h-0">
                     <div class="flex items-center gap-2 mb-2">
                       <div class="w-1 h-1 rounded-full bg-cyan-500/50"></div>
                       <h3 class="text-[9px] uppercase tracking-widest text-cyan-400/80 font-black">Heuristic</h3>
                     </div>
-                    <pre class="flex-1 text-[9px] leading-relaxed bg-[#05060a] border border-white/[0.05] p-3 rounded-xl text-cyan-100/40 font-mono overflow-auto max-h-[120px] custom-scrollbar">
+                    <pre class="flex-1 text-[9px] leading-relaxed bg-[#05060a] border border-white/[0.05] p-3 rounded-xl text-cyan-100/40 font-mono overflow-auto max-h-[100px] custom-scrollbar">
 <%= entity.behavior_source %>
                     </pre>
                   </div>
@@ -143,11 +158,6 @@ defmodule EvolvingMindsWeb.WorldLive do
                           <span class="text-[8px] font-mono text-slate-600">→ <%= String.slice(sender, 0, 4) %></span>
                         </div>
                       <% end %>
-                      <%= if Enum.empty?(EvolvingMinds.Memory.get_memories(entity.id)) do %>
-                        <div class="text-center py-2 opacity-20">
-                          <p class="text-[8px] text-slate-500 font-mono uppercase tracking-widest">Idle</p>
-                        </div>
-                      <% end %>
                     </div>
                   </div>
                 </div>
@@ -155,6 +165,141 @@ defmodule EvolvingMindsWeb.WorldLive do
             <% end %>
           </div>
         </div>
+
+        <!-- Sidebar for Logs and Stats -->
+        <aside class="w-full lg:w-[400px] flex flex-col gap-8">
+          <!-- Global Logs -->
+          <div class="bg-slate-900/40 backdrop-blur-3xl border border-white/10 rounded-[2rem] p-6 flex flex-col h-[400px]">
+            <div class="flex items-center justify-between mb-6">
+              <h3 class="text-xs font-black text-white uppercase tracking-[0.3em]">Global Events</h3>
+              <div class="px-2 py-0.5 rounded-md bg-cyan-500/10 border border-cyan-500/20">
+                <span class="text-[8px] font-bold text-cyan-500 uppercase tracking-widest">Real-time</span>
+              </div>
+            </div>
+            
+            <div class="flex-1 overflow-auto custom-scrollbar space-y-3 pr-2">
+              <%= for event <- @global_events do %>
+                <div class="bg-black/40 border border-white/5 p-3 rounded-xl flex flex-col gap-1">
+                  <div class="flex items-center justify-between">
+                    <span class={"text-[9px] font-black uppercase tracking-widest #{case event.type do
+                      :death -> "text-rose-500"
+                      :mutation -> "text-purple-400"
+                      :birth -> "text-emerald-400"
+                      :reproduction -> "text-cyan-400"
+                      _ -> "text-slate-400"
+                    end}"}>
+                      <%= event.type %>
+                    </span>
+                    <span class="text-[8px] font-mono text-slate-600">
+                      <%= Calendar.strftime(event.timestamp, "%H:%M:%S") %>
+                    </span>
+                  </div>
+                  <p class="text-[10px] text-slate-400 font-medium">
+                    <%= if Map.has_key?(event, :entity_id), do: "Entity " <> String.slice(event.entity_id, 0, 8), else: event[:detail] || "System action" %>
+                    <%= if Map.has_key?(event, :parent_id), do: "from parent " <> String.slice(event.parent_id, 0, 8), else: "" %>
+                  </p>
+                </div>
+              <% end %>
+              <%= if Enum.empty?(@global_events) do %>
+                <div class="h-full flex items-center justify-center opacity-20">
+                  <p class="text-[9px] font-bold text-slate-500 uppercase tracking-[0.2em]">Monitoring Initializing...</p>
+                </div>
+              <% end %>
+            </div>
+          </div>
+
+          <!-- Evolution Stats -->
+          <div class="bg-slate-900/40 backdrop-blur-3xl border border-white/10 rounded-[2rem] p-6">
+            <h3 class="text-xs font-black text-white uppercase tracking-[0.3em] mb-6">Evolution Trends</h3>
+            
+            <div class="space-y-6">
+              <%= if !Enum.empty?(@stats) do %>
+                <% current = List.first(@stats) %>
+                <div class="grid grid-cols-2 gap-4">
+                  <div class="bg-black/40 p-3 rounded-2xl border border-white/5">
+                    <span class="text-[8px] text-slate-500 uppercase font-black block mb-1">Avg Aggression</span>
+                    <span class="text-xl font-black text-orange-500 tabular-nums"><%= Float.round(current.avg_aggression, 2) %></span>
+                  </div>
+                  <div class="bg-black/40 p-3 rounded-2xl border border-white/5">
+                    <span class="text-[8px] text-slate-500 uppercase font-black block mb-1">Avg Curiosity</span>
+                    <span class="text-xl font-black text-cyan-500 tabular-nums"><%= Float.round(current.avg_curiosity, 2) %></span>
+                  </div>
+                </div>
+
+                <!-- Simple SVG Sparkline visualization -->
+                <div class="h-32 w-full bg-black/40 rounded-2xl border border-white/5 p-4 relative overflow-hidden">
+                  <svg class="w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
+                    <!-- Aggression line -->
+                    <polyline
+                      fill="none"
+                      stroke="#f97316"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      points={
+                        @stats 
+                        |> Enum.reverse() 
+                        |> Enum.with_index() 
+                        |> Enum.map_join(" ", fn {s, i} -> "#{i * (100 / (length(@stats) - 1))},#{100 - s.avg_aggression * 100}" end)
+                      }
+                    />
+                    <!-- Curiosity line -->
+                    <polyline
+                      fill="none"
+                      stroke="#06b6d4"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      points={
+                        @stats 
+                        |> Enum.reverse() 
+                        |> Enum.with_index() 
+                        |> Enum.map_join(" ", fn {s, i} -> "#{i * (100 / (length(@stats) - 1))},#{100 - s.avg_curiosity * 100}" end)
+                      }
+                    />
+                  </svg>
+                  <div class="absolute bottom-2 left-4 flex gap-4">
+                    <div class="flex items-center gap-1.5">
+                      <div class="w-2 h-2 rounded-full bg-orange-500"></div>
+                      <span class="text-[7px] font-bold text-slate-500 uppercase">Aggr</span>
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                      <div class="w-2 h-2 rounded-full bg-cyan-500"></div>
+                      <span class="text-[7px] font-bold text-slate-500 uppercase">Curi</span>
+                    </div>
+                  </div>
+                </div>
+              <% else %>
+                <div class="h-32 flex items-center justify-center opacity-20">
+                  <p class="text-[9px] font-bold text-slate-500 uppercase tracking-[0.2em]">Calculating Traits...</p>
+                </div>
+              <% end %>
+            </div>
+          </div>
+
+          <!-- Top Connections -->
+          <div class="bg-slate-900/40 backdrop-blur-3xl border border-white/10 rounded-[2rem] p-6">
+            <h3 class="text-xs font-black text-white uppercase tracking-[0.3em] mb-6">Social Graph</h3>
+            <div class="space-y-4">
+              <%= for {pair, count} <- @top_interactions do %>
+                <div class="flex items-center justify-between bg-black/40 p-3 rounded-2xl border border-white/5">
+                  <div class="flex items-center gap-2">
+                    <span class="text-[9px] font-mono font-bold text-cyan-400"><%= String.slice(Enum.at(pair, 0), 0, 4) %></span>
+                    <div class="w-3 h-[1px] bg-slate-700"></div>
+                    <span class="text-[9px] font-mono font-bold text-cyan-400"><%= String.slice(Enum.at(pair, 1), 0, 4) %></span>
+                  </div>
+                  <div class="flex items-center gap-1.5">
+                    <span class="text-[10px] font-black text-slate-300"><%= count %></span>
+                    <span class="text-[7px] font-bold text-slate-500 uppercase">msgr</span>
+                  </div>
+                </div>
+              <% end %>
+              <%= if Enum.empty?(@top_interactions) do %>
+                <div class="py-4 text-center opacity-20">
+                  <p class="text-[9px] font-bold text-slate-500 uppercase tracking-[0.2em]">Silent World</p>
+                </div>
+              <% end %>
+            </div>
+          </div>
+        </aside>
       </main>
       
       <style>
