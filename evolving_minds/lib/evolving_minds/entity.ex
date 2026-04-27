@@ -28,7 +28,7 @@ defmodule EvolvingMinds.Entity do
     }
     
     source_code = MutationEngine.generate_behavior(traits)
-    behavior_fn = MutationEngine.compile_behavior(source_code)
+    behavior_fn = MutationEngine.compile_behavior(traits)
 
     state = %{
       id: id,
