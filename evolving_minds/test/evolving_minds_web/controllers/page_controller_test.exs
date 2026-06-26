@@ -7,5 +7,8 @@ defmodule EvolvingMindsWeb.PageControllerTest do
 
     assert response =~ "Evolving"
     assert response =~ "Autonomous Heuristic Simulator"
+    assert response =~ "Filter entity ID"
+    assert response =~ "Energy high"
+    assert response =~ "Visible"
   end
 end

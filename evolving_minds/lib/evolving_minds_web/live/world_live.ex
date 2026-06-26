@@ -6,25 +6,31 @@ defmodule EvolvingMindsWeb.WorldLive do
   def mount(_params, _session, socket) do
     if connected?(socket), do: :timer.send_interval(2000, :tick)
 
+    entities = fetch_entities()
+
     socket =
       socket
-      |> assign(entities: fetch_entities())
+      |> assign(:query, "")
+      |> assign(:sort, "energy_desc")
       |> assign(global_events: EvolvingMinds.GlobalEvents.get_recent_events())
       |> assign(stats: EvolvingMinds.Stats.get_history())
       |> assign(top_interactions: EvolvingMinds.Stats.get_top_interactions())
       |> assign(public_controls: Application.get_env(:evolving_minds, :public_controls, false))
+      |> assign_entities(entities)
 
     {:ok, socket, layout: {EvolvingMindsWeb.Layouts, :screen}}
   end
 
   @impl true
   def handle_info(:tick, socket) do
+    entities = fetch_entities()
+
     {:noreply,
      socket
-     |> assign(entities: fetch_entities())
      |> assign(global_events: EvolvingMinds.GlobalEvents.get_recent_events())
      |> assign(stats: EvolvingMinds.Stats.get_history())
-     |> assign(top_interactions: EvolvingMinds.Stats.get_top_interactions())}
+     |> assign(top_interactions: EvolvingMinds.Stats.get_top_interactions())
+     |> assign_entities(entities)}
   end
 
   @impl true
@@ -33,12 +39,56 @@ defmodule EvolvingMindsWeb.WorldLive do
       World.inject_energy(id)
     end
 
-    {:noreply, assign(socket, entities: fetch_entities())}
+    {:noreply, assign_entities(socket, fetch_entities())}
+  end
+
+  @impl true
+  def handle_event("filter_entities", %{"filters" => filters}, socket) do
+    query = Map.get(filters, "query", "") |> String.trim()
+    sort = Map.get(filters, "sort", "energy_desc")
+
+    socket =
+      socket
+      |> assign(:query, query)
+      |> assign(:sort, sort)
+      |> assign_entities(socket.assigns.entities)
+
+    {:noreply, socket}
   end
 
   defp fetch_entities do
     EvolvingMinds.StateStore.get_all_states()
   end
+
+  defp assign_entities(socket, entities) do
+    visible_entities =
+      entities |> filter_entities(socket.assigns.query) |> sort_entities(socket.assigns.sort)
+
+    socket
+    |> assign(:entities, entities)
+    |> assign(:visible_entities, visible_entities)
+    |> assign(:total_population, length(entities))
+  end
+
+  defp filter_entities(entities, ""), do: entities
+
+  defp filter_entities(entities, query) do
+    normalized_query = String.downcase(query)
+
+    Enum.filter(entities, fn entity ->
+      entity.id |> String.downcase() |> String.contains?(normalized_query)
+    end)
+  end
+
+  defp sort_entities(entities, "energy_asc"), do: Enum.sort_by(entities, & &1.energy)
+
+  defp sort_entities(entities, "aggression_desc"),
+    do: Enum.sort_by(entities, & &1.traits.aggression, :desc)
+
+  defp sort_entities(entities, "curiosity_desc"),
+    do: Enum.sort_by(entities, & &1.traits.curiosity, :desc)
+
+  defp sort_entities(entities, _), do: Enum.sort_by(entities, & &1.energy, :desc)
 
   @impl true
   def render(assigns) do
@@ -46,18 +96,18 @@ defmodule EvolvingMindsWeb.WorldLive do
     <div class="min-h-screen w-full bg-[#050608] text-slate-300 font-sans selection:bg-cyan-500/30 flex flex-col">
       <!-- Fixed Header for better UX on long lists -->
       <header class="sticky top-0 z-50 w-full bg-[#050608]/80 backdrop-blur-xl border-b border-white/5 px-4 py-4 md:px-8">
-        <div class="max-w-[2400px] mx-auto flex flex-col md:flex-row items-center justify-between gap-6">
-          <div class="relative group">
+        <div class="max-w-[2400px] mx-auto flex flex-col xl:flex-row items-stretch xl:items-center justify-between gap-4">
+          <div class="relative group text-center sm:text-left">
             <div class="absolute -inset-2 bg-gradient-to-r from-cyan-600 to-blue-700 rounded-xl blur-lg opacity-20 group-hover:opacity-40 transition duration-1000">
             </div>
-            <h1 class="relative text-3xl md:text-4xl font-black tracking-tighter text-white">
+            <h1 class="relative text-3xl md:text-4xl font-black tracking-normal text-white">
               Evolving
               <span class="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-blue-500 to-indigo-600">
                 Minds
               </span>
             </h1>
-            <div class="flex items-center gap-3 mt-1">
-              <p class="text-slate-500 font-mono text-[9px] uppercase tracking-[0.4em]">
+            <div class="flex flex-wrap items-center justify-center sm:justify-start gap-3 mt-1">
+              <p class="text-slate-500 font-mono text-[9px] uppercase tracking-[0.2em] sm:tracking-[0.4em]">
                 Autonomous Heuristic Simulator
               </p>
               <span class="text-[9px] text-cyan-500/50 font-bold uppercase tracking-widest animate-pulse">
@@ -66,13 +116,46 @@ defmodule EvolvingMindsWeb.WorldLive do
             </div>
           </div>
 
-          <div class="flex items-center gap-4 bg-slate-900/40 backdrop-blur-3xl border border-white/10 px-6 py-3 rounded-2xl shadow-2xl">
+          <form
+            phx-change="filter_entities"
+            class="grid grid-cols-1 sm:grid-cols-[minmax(180px,1fr)_180px] gap-3 w-full xl:max-w-xl"
+          >
+            <div class="relative">
+              <input
+                type="search"
+                name="filters[query]"
+                value={@query}
+                placeholder="Filter entity ID"
+                class="w-full h-11 rounded-xl border border-white/10 bg-black/30 px-4 text-sm text-slate-200 placeholder:text-slate-600 focus:border-cyan-500/60 focus:ring-cyan-500/20"
+              />
+            </div>
+            <select
+              name="filters[sort]"
+              value={@sort}
+              class="h-11 rounded-xl border border-white/10 bg-black/30 px-4 text-sm text-slate-200 focus:border-cyan-500/60 focus:ring-cyan-500/20"
+            >
+              <option value="energy_desc">Energy high</option>
+              <option value="energy_asc">Energy low</option>
+              <option value="aggression_desc">Aggression</option>
+              <option value="curiosity_desc">Curiosity</option>
+            </select>
+          </form>
+
+          <div class="flex items-center justify-center xl:justify-start gap-4 bg-slate-900/40 backdrop-blur-3xl border border-white/10 px-4 sm:px-6 py-3 rounded-2xl shadow-2xl">
             <div class="flex flex-col items-center border-r border-white/10 pr-6">
               <span class="text-[8px] uppercase tracking-[0.2em] text-slate-500 font-bold mb-0.5">
                 Population
               </span>
               <span class="text-2xl font-black text-white leading-none tabular-nums">
-                {length(@entities)}
+                {@total_population}
+              </span>
+            </div>
+            <div class="flex flex-col items-center border-r border-white/10 pr-6">
+              <span class="text-[8px] uppercase tracking-[0.2em] text-slate-500 font-bold mb-0.5">
+                Visible
+              </span>
+              <span class="text-2xl font-black text-white leading-none tabular-nums">
+                {length(@visible_entities)}
               </span>
             </div>
             <div class="flex flex-col items-start gap-0.5 pl-2">
@@ -90,11 +173,11 @@ defmodule EvolvingMindsWeb.WorldLive do
         </div>
       </header>
       <!-- Full-Width Main Content -->
-      <main class="flex-1 w-full px-4 py-8 md:px-8 overflow-hidden flex flex-col lg:flex-row gap-8">
+      <main class="flex-1 w-full px-4 py-6 md:px-8 md:py-8 overflow-visible lg:overflow-hidden flex flex-col lg:flex-row gap-6 lg:gap-8">
         <!-- Main Simulation Grid -->
         <div class="flex-1 overflow-auto custom-scrollbar-none">
-          <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6">
-            <%= for entity <- @entities do %>
+          <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4 md:gap-6">
+            <%= for entity <- @visible_entities do %>
               <div class="group relative bg-slate-900/20 backdrop-blur-xl border border-white/5 rounded-[2rem] p-1 transition-all duration-500 hover:scale-[1.01] hover:border-cyan-500/30">
                 <div class="bg-[#0b0d15]/95 rounded-[1.8rem] p-5 h-full flex flex-col border border-white/[0.02]">
                   <!-- Entity Header -->
@@ -223,6 +306,19 @@ defmodule EvolvingMindsWeb.WorldLive do
                       <% end %>
                     </div>
                   </div>
+                </div>
+              </div>
+            <% end %>
+
+            <%= if Enum.empty?(@visible_entities) do %>
+              <div class="sm:col-span-2 xl:col-span-3 2xl:col-span-4 min-h-56 flex items-center justify-center rounded-2xl border border-white/10 bg-slate-900/20 p-8 text-center">
+                <div>
+                  <p class="text-xs font-black uppercase tracking-[0.3em] text-slate-500">
+                    No entities match
+                  </p>
+                  <p class="mt-2 text-sm text-slate-600">
+                    Clear the filter or wait for the next generation.
+                  </p>
                 </div>
               </div>
             <% end %>
