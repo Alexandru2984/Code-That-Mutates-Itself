@@ -6,18 +6,16 @@ defmodule EvolvingMinds.Memory do
   end
 
   def init(_) do
-    :ets.new(:entity_memories, [:set, :public, :named_table, read_concurrency: true])
+    :ets.new(:entity_memories, [:set, :protected, :named_table, read_concurrency: true])
     {:ok, %{}}
   end
 
   def remember(entity_id, interaction) do
-    current = case :ets.lookup(:entity_memories, entity_id) do
-      [{^entity_id, memories}] -> memories
-      [] -> []
-    end
-    # Decay: keep only last 100 memories
-    new_memories = Enum.take([interaction | current], 100)
-    :ets.insert(:entity_memories, {entity_id, new_memories})
+    GenServer.call(__MODULE__, {:remember, entity_id, interaction})
+  end
+
+  def forget(entity_id) do
+    GenServer.call(__MODULE__, {:forget, entity_id})
   end
 
   def get_memories(entity_id) do
@@ -31,8 +29,7 @@ defmodule EvolvingMinds.Memory do
     :ets.tab2list(:entity_memories)
     |> Enum.flat_map(fn {id, memories} ->
       Enum.map(memories, fn {type, sender} ->
-        # Sort to treat (A->B) and (B->A) as the same connection if we want undirected,
-        # but let's keep it directed for now or just count pairs.
+        # Sort to treat both directions as the same social connection.
         pair = Enum.sort([id, sender])
         {pair, type}
       end)
@@ -43,5 +40,23 @@ defmodule EvolvingMinds.Memory do
     end)
     |> Enum.sort_by(fn {_, count} -> count end, :desc)
     |> Enum.take(limit)
+  end
+
+  def handle_call({:remember, entity_id, interaction}, _from, state) do
+    current =
+      case :ets.lookup(:entity_memories, entity_id) do
+        [{^entity_id, memories}] -> memories
+        [] -> []
+      end
+
+    # Decay: keep only last 100 memories
+    new_memories = Enum.take([interaction | current], 100)
+    :ets.insert(:entity_memories, {entity_id, new_memories})
+    {:reply, :ok, state}
+  end
+
+  def handle_call({:forget, entity_id}, _from, state) do
+    :ets.delete(:entity_memories, entity_id)
+    {:reply, :ok, state}
   end
 end

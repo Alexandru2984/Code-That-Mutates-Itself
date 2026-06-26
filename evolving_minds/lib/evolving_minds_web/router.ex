@@ -34,8 +34,9 @@ defmodule EvolvingMindsWeb.Router do
     live "/", WorldLive
   end
 
-  # Other scopes may use custom stacks.
-  # scope "/api", EvolvingMindsWeb do
-  #   pipe_through :api
-  # end
+  scope "/", EvolvingMindsWeb do
+    pipe_through :api
+
+    get "/healthz", HealthController, :show
+  end
 end

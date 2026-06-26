@@ -6,12 +6,12 @@ defmodule EvolvingMinds.StateStore do
   end
 
   def init(_) do
-    :ets.new(:entity_states, [:set, :public, :named_table, read_concurrency: true])
+    :ets.new(:entity_states, [:set, :protected, :named_table, read_concurrency: true])
     {:ok, %{}}
   end
 
   def update_state(id, state) do
-    :ets.insert(:entity_states, {id, state})
+    GenServer.call(__MODULE__, {:update_state, id, state})
   end
 
   def get_state(id) do
@@ -26,6 +26,16 @@ defmodule EvolvingMinds.StateStore do
   end
 
   def remove_state(id) do
+    GenServer.call(__MODULE__, {:remove_state, id})
+  end
+
+  def handle_call({:update_state, id, entity_state}, _from, state) do
+    :ets.insert(:entity_states, {id, entity_state})
+    {:reply, :ok, state}
+  end
+
+  def handle_call({:remove_state, id}, _from, state) do
     :ets.delete(:entity_states, id)
+    {:reply, :ok, state}
   end
 end
