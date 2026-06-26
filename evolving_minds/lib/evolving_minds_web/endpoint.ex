@@ -22,7 +22,7 @@ defmodule EvolvingMindsWeb.Endpoint do
   plug Plug.Static,
     at: "/",
     from: :evolving_minds,
-    gzip: false,
+    gzip: true,
     only: EvolvingMindsWeb.static_paths()
 
   # Code reloading can be explicitly enabled under the

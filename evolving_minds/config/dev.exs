@@ -11,7 +11,6 @@ config :evolving_minds, EvolvingMindsWeb.Endpoint,
   # Change to `ip: {0, 0, 0, 0}` to allow access from other machines.
   http: [ip: {0, 0, 0, 0}, port: 4000],
   check_origin: false,
-  check_origin: false,
   code_reloader: true,
   debug_errors: true,
   secret_key_base: "bgMkVVlIlCblz22BsswzvMbspTDcl1HL+neKl/K5KHpT8Lzp1Z8sA9lfrCht2A3Y",
@@ -70,3 +69,5 @@ config :phoenix_live_view,
   debug_heex_annotations: true,
   # Disable expensive runtime checks to reduce CPU overhead
   enable_expensive_runtime_checks: false
+
+config :evolving_minds, public_controls: true

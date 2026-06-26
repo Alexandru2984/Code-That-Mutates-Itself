@@ -35,17 +35,35 @@ if config_env() == :prod do
 
   host = System.get_env("PHX_HOST") || "example.com"
   port = String.to_integer(System.get_env("PORT") || "4000")
+  bind_ip = System.get_env("PHX_BIND_IP") || "127.0.0.1"
+
+  ip =
+    case :inet.parse_address(String.to_charlist(bind_ip)) do
+      {:ok, parsed_ip} ->
+        parsed_ip
+
+      {:error, _} ->
+        raise "environment variable PHX_BIND_IP must be a valid IP address, got: #{inspect(bind_ip)}"
+    end
+
+  check_origin =
+    case System.get_env("PHX_CHECK_ORIGIN") do
+      nil -> ["//#{host}", "//www.#{host}"]
+      origins -> String.split(origins, ",", trim: true)
+    end
+
+  public_controls =
+    System.get_env("WORLD_PUBLIC_CONTROLS") in ["1", "true", "TRUE", "yes", "YES"]
 
   config :evolving_minds, :dns_cluster_query, System.get_env("DNS_CLUSTER_QUERY")
+  config :evolving_minds, public_controls: public_controls
 
   config :evolving_minds, EvolvingMindsWeb.Endpoint,
     url: [host: host, port: 443, scheme: "https"],
+    check_origin: check_origin,
+    force_ssl: [hsts: true, rewrite_on: [:x_forwarded_proto]],
     http: [
-      # Enable IPv6 and bind on all interfaces.
-      # Set it to  {0, 0, 0, 0, 0, 0, 0, 1} for local network only access.
-      # See the documentation on https://hexdocs.pm/bandit/Bandit.html#t:options/0
-      # for details about using IPv6 vs IPv4 and loopback vs public addresses.
-      ip: {0, 0, 0, 0, 0, 0, 0, 0},
+      ip: ip,
       port: port
     ],
     secret_key_base: secret_key_base
