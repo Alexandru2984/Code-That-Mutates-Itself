@@ -11,10 +11,12 @@ defmodule EvolvingMinds.Memory do
   end
 
   def remember(entity_id, interaction) do
-    current = case :ets.lookup(:entity_memories, entity_id) do
-      [{^entity_id, memories}] -> memories
-      [] -> []
-    end
+    current =
+      case :ets.lookup(:entity_memories, entity_id) do
+        [{^entity_id, memories}] -> memories
+        [] -> []
+      end
+
     # Decay: keep only last 100 memories
     new_memories = Enum.take([interaction | current], 100)
     :ets.insert(:entity_memories, {entity_id, new_memories})

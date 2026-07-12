@@ -35,11 +35,16 @@ defmodule EvolvingMinds.MutationEngine do
 
     fn
       {:greet, sender_id} ->
-        if :rand.uniform() > 0.5, do: {base_response, sender_id}, else: {secondary_response, sender_id}
+        if :rand.uniform() > 0.5,
+          do: {base_response, sender_id},
+          else: {secondary_response, sender_id}
+
       {:attack, sender_id} ->
         {:flee, sender_id}
+
       {:share_knowledge, sender_id} ->
         {:greet, sender_id}
+
       _ ->
         {:ignore, nil}
     end

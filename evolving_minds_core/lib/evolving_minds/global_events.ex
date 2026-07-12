@@ -20,7 +20,8 @@ defmodule EvolvingMinds.GlobalEvents do
   def handle_cast({:report, event}, state) do
     timestamp = DateTime.utc_now()
     new_event = Map.put(event, :timestamp, timestamp)
-    new_state = Enum.take([new_event | state], 50) # Keep last 50
+    # Keep last 50
+    new_state = Enum.take([new_event | state], 50)
     {:noreply, new_state}
   end
 

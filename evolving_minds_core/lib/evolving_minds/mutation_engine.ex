@@ -35,7 +35,7 @@ defmodule EvolvingMinds.MutationEngine do
       aggression: min(1.0, max(0.0, traits.aggression + (:rand.uniform() - 0.5) * 0.2)),
       curiosity: min(1.0, max(0.0, traits.curiosity + (:rand.uniform() - 0.5) * 0.2))
     }
-    
+
     if :rand.uniform() > 0.8 do
       new_source = generate_behavior(new_traits)
       {new_traits, new_source, compile_behavior(new_source)}

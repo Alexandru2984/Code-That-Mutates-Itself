@@ -26,14 +26,14 @@ defmodule EvolvingMinds.Stats do
     else
       avg_aggression = Enum.map(entities, & &1.traits.aggression) |> avg()
       avg_curiosity = Enum.map(entities, & &1.traits.curiosity) |> avg()
-      
+
       data_point = %{
         timestamp: DateTime.utc_now(),
         avg_aggression: avg_aggression,
         avg_curiosity: avg_curiosity,
         population: length(entities)
       }
-      
+
       new_history = Enum.take([data_point | state.history], 100)
       new_top = EvolvingMinds.Memory.get_top_interactions()
       {:noreply, %{state | history: new_history, top_interactions: new_top}}

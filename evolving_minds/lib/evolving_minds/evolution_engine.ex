@@ -10,16 +10,17 @@ defmodule EvolvingMinds.EvolutionEngine do
 
   def init(state) do
     Logger.info("Evolution Engine starting. Creating initial population.")
-    
+
     # Needs to run async so application supervisor doesn't block waiting for init
     send(self(), :seed)
     {:ok, state}
   end
-  
+
   def handle_info(:seed, state) do
     for _ <- 1..5 do
       World.spawn_entity()
     end
+
     Process.send_after(self(), :evaluate, 10000)
     {:noreply, state}
   end
@@ -27,9 +28,9 @@ defmodule EvolvingMinds.EvolutionEngine do
   def handle_info(:evaluate, state) do
     entities = World.get_all_entities()
     population_size = length(entities)
-    
+
     Logger.debug("Evaluating world. Population size: #{population_size}")
-    
+
     max_population = 50
 
     if population_size < 3 do

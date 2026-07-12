@@ -8,7 +8,10 @@ defmodule EvolvingMinds.World do
   end
 
   def spawn_entity(id) do
-    DynamicSupervisor.start_child(EvolvingMinds.EntitySupervisor, {EvolvingMinds.Entity, [id: id]})
+    DynamicSupervisor.start_child(
+      EvolvingMinds.EntitySupervisor,
+      {EvolvingMinds.Entity, [id: id]}
+    )
   end
 
   def get_all_entities() do
@@ -24,6 +27,7 @@ defmodule EvolvingMinds.World do
     case Registry.lookup(EvolvingMinds.EntityRegistry, target_id) do
       [{pid, _}] ->
         GenServer.cast(pid, {:message, type, sender_id})
+
       [] ->
         :ok
     end
