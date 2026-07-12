@@ -132,6 +132,16 @@ defmodule EvolvingMinds.Entity do
   end
 
   def handle_info(:act, state) do
+    if World.paused?() do
+      # Frozen world: keep the heartbeat but change nothing.
+      Process.send_after(self(), :act, 2000 + :rand.uniform(3000))
+      {:noreply, state}
+    else
+      act(state)
+    end
+  end
+
+  defp act(state) do
     case World.get_random_entity(state.id) do
       nil ->
         :ok

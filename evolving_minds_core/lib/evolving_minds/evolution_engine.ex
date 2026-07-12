@@ -44,6 +44,15 @@ defmodule EvolvingMinds.EvolutionEngine do
   end
 
   def handle_info(:evaluate, state) do
+    if World.paused?() do
+      Process.send_after(self(), :evaluate, 10000)
+      {:noreply, state}
+    else
+      evaluate(state)
+    end
+  end
+
+  defp evaluate(state) do
     states = StateStore.get_all_states()
     population_size = length(states)
 

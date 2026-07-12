@@ -35,4 +35,33 @@ defmodule EvolvingMinds.WorldTest do
 
     assert {:error, {:already_started, ^pid}} = World.spawn_entity(id)
   end
+
+  test "a paused world freezes acting entities" do
+    {id, pid} = spawn_entity("PAWS")
+    on_exit(fn -> World.resume() end)
+
+    World.pause()
+    send(pid, :act)
+    Process.sleep(150)
+    assert EvolvingMinds.StateStore.get_state(id).energy == 100
+
+    World.resume()
+    send(pid, :act)
+
+    assert eventually(fn -> EvolvingMinds.StateStore.get_state(id).energy == 95 end)
+  end
+
+  defp eventually(fun, attempts \\ 50) do
+    cond do
+      fun.() ->
+        true
+
+      attempts == 0 ->
+        false
+
+      true ->
+        Process.sleep(20)
+        eventually(fun, attempts - 1)
+    end
+  end
 end

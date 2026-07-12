@@ -22,3 +22,5 @@ config :phoenix_live_view,
   enable_expensive_runtime_checks: true
 
 config :evolving_minds, public_controls: true
+
+config :evolving_minds, admin_credentials: [username: "admin", password: "secret"]

@@ -1,6 +1,8 @@
 defmodule EvolvingMindsWeb.Router do
   use EvolvingMindsWeb, :router
 
+  import Phoenix.LiveDashboard.Router
+
   @secure_browser_headers %{
     "content-security-policy" =>
       "default-src 'self'; " <>
@@ -38,5 +40,16 @@ defmodule EvolvingMindsWeb.Router do
     pipe_through :api
 
     get "/healthz", HealthController, :show
+  end
+
+  pipeline :admin do
+    plug EvolvingMindsWeb.AdminAuth
+  end
+
+  scope "/admin" do
+    pipe_through [:browser, :admin]
+
+    live "/world", EvolvingMindsWeb.AdminLive
+    live_dashboard "/dashboard", metrics: EvolvingMindsWeb.Telemetry
   end
 end

@@ -54,6 +54,15 @@ defmodule EvolvingMinds.World do
     end
   end
 
+  @paused_key {__MODULE__, :paused}
+
+  @doc "Freezes the simulation: entities keep their timers but skip acting."
+  def pause, do: :persistent_term.put(@paused_key, true)
+
+  def resume, do: :persistent_term.put(@paused_key, false)
+
+  def paused?, do: :persistent_term.get(@paused_key, false)
+
   @doc """
   Applies a raw energy transfer to an entity (interaction settlements).
   Unlike messages, adjustments never trigger behavior responses.

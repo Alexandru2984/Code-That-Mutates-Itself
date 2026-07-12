@@ -58,6 +58,14 @@ if config_env() == :prod do
   config :evolving_minds, :dns_cluster_query, System.get_env("DNS_CLUSTER_QUERY")
   config :evolving_minds, public_controls: public_controls
 
+  # The admin area only exists when both are set; otherwise it 404s.
+  admin_user = System.get_env("ADMIN_USER")
+  admin_pass = System.get_env("ADMIN_PASS")
+
+  if admin_user && admin_pass do
+    config :evolving_minds, admin_credentials: [username: admin_user, password: admin_pass]
+  end
+
   config :evolving_minds, EvolvingMindsWeb.Endpoint,
     url: [host: host, port: 443, scheme: "https"],
     check_origin: check_origin,
