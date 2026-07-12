@@ -54,6 +54,20 @@ defmodule EvolvingMindsWeb.WorldLiveTest do
     assert render(view) =~ String.slice(id, 0, 8)
   end
 
+  test "dead entities drop out of the grid on world updates", %{conn: conn} do
+    {id, pid, cleanup} = spawn_test_entity("GONE")
+    on_exit(cleanup)
+
+    {:ok, view, html} = live(conn, "/")
+    assert html =~ String.slice(id, 0, 8)
+
+    DynamicSupervisor.terminate_child(EvolvingMinds.EntitySupervisor, pid)
+    assert eventually(fn -> StateStore.get_state(id) == nil end)
+
+    send(view.pid, {:world_update, WorldPublisher.snapshot()})
+    refute render(view) =~ String.slice(id, 0, 8)
+  end
+
   test "filter narrows visible entities", %{conn: conn} do
     {id, _pid, cleanup} = spawn_test_entity("FLTR")
     on_exit(cleanup)

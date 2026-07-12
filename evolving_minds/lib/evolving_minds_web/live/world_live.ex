@@ -12,8 +12,10 @@ defmodule EvolvingMindsWeb.WorldLive do
       socket
       |> assign(:query, "")
       |> assign(:sort, "energy_desc")
+      |> assign(:prev_visible, [])
       |> assign(public_controls: Application.get_env(:evolving_minds, :public_controls, false))
-      |> apply_snapshot(WorldPublisher.snapshot())
+      |> stream_configure(:entities, dom_id: &"entity-#{&1.id}")
+      |> apply_snapshot(WorldPublisher.snapshot(), reset: true)
 
     {:ok, socket, layout: {EvolvingMindsWeb.Layouts, :screen}}
   end
@@ -41,28 +43,76 @@ defmodule EvolvingMindsWeb.WorldLive do
       socket
       |> assign(:query, query)
       |> assign(:sort, sort)
-      |> assign_entities(socket.assigns.entities)
+      |> refresh_stream(socket.assigns.entities, reset: true)
 
     {:noreply, socket}
   end
 
-  defp apply_snapshot(socket, snapshot) do
+  defp apply_snapshot(socket, snapshot, opts \\ []) do
+    entities = merge_memories(snapshot.entities, snapshot.memories)
+
     socket
     |> assign(:global_events, snapshot.global_events)
     |> assign(:stats, snapshot.stats)
     |> assign(:top_interactions, snapshot.top_interactions)
-    |> assign(:memories, snapshot.memories)
-    |> assign_entities(snapshot.entities)
+    |> assign(:entities, entities)
+    |> refresh_stream(entities, opts)
   end
 
-  defp assign_entities(socket, entities) do
-    visible_entities =
+  # Memories ride inside each stream item: a stream card only re-renders
+  # when re-inserted, so everything it displays must be part of the item.
+  defp merge_memories(entities, memories) do
+    Enum.map(entities, &Map.put(&1, :memories, Map.get(memories, &1.id, [])))
+  end
+
+  defp refresh_stream(socket, entities, opts) do
+    visible =
       entities |> filter_entities(socket.assigns.query) |> sort_entities(socket.assigns.sort)
 
-    socket
-    |> assign(:entities, entities)
-    |> assign(:visible_entities, visible_entities)
-    |> assign(:total_population, length(entities))
+    prev_visible = socket.assigns.prev_visible
+
+    socket =
+      socket
+      |> assign(:prev_visible, visible)
+      |> assign(:visible_count, length(visible))
+      |> assign(:total_population, length(entities))
+
+    if Keyword.get(opts, :reset, false) do
+      stream(socket, :entities, visible, reset: true)
+    else
+      diff_stream(socket, prev_visible, visible)
+    end
+  end
+
+  # Sends only what changed: deletes for entities that left the visible
+  # set, and positional re-inserts for entities whose data or sort index
+  # changed. Untouched cards produce no payload at all.
+  defp diff_stream(socket, prev_visible, visible) do
+    prev_by_id = Map.new(prev_visible, &{&1.id, &1})
+
+    prev_index =
+      prev_visible |> Enum.with_index() |> Map.new(fn {entity, i} -> {entity.id, i} end)
+
+    visible_ids = MapSet.new(visible, & &1.id)
+
+    socket =
+      Enum.reduce(prev_visible, socket, fn entity, acc ->
+        if MapSet.member?(visible_ids, entity.id) do
+          acc
+        else
+          stream_delete(acc, :entities, entity)
+        end
+      end)
+
+    visible
+    |> Enum.with_index()
+    |> Enum.reduce(socket, fn {entity, index}, acc ->
+      if Map.get(prev_by_id, entity.id) == entity and Map.get(prev_index, entity.id) == index do
+        acc
+      else
+        stream_insert(acc, :entities, entity, at: index)
+      end
+    end)
   end
 
   defp filter_entities(entities, ""), do: entities
@@ -112,6 +162,7 @@ defmodule EvolvingMindsWeb.WorldLive do
           </div>
 
           <form
+            id="filter-form"
             phx-change="filter_entities"
             class="grid grid-cols-1 sm:grid-cols-[minmax(180px,1fr)_180px] gap-3 w-full xl:max-w-xl"
           >
@@ -150,7 +201,7 @@ defmodule EvolvingMindsWeb.WorldLive do
                 Visible
               </span>
               <span class="text-2xl font-black text-white leading-none tabular-nums">
-                {length(@visible_entities)}
+                {@visible_count}
               </span>
             </div>
             <div class="flex flex-col items-start gap-0.5 pl-2">
@@ -171,9 +222,16 @@ defmodule EvolvingMindsWeb.WorldLive do
       <main class="flex-1 w-full px-4 py-6 md:px-8 md:py-8 overflow-visible lg:overflow-hidden flex flex-col lg:flex-row gap-6 lg:gap-8">
         <!-- Main Simulation Grid -->
         <div class="flex-1 overflow-auto custom-scrollbar-none">
-          <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4 md:gap-6">
-            <%= for entity <- @visible_entities do %>
-              <div class="group relative bg-slate-900/20 backdrop-blur-xl border border-white/5 rounded-[2rem] p-1 transition-all duration-500 hover:scale-[1.01] hover:border-cyan-500/30">
+          <div
+            id="entities-grid"
+            phx-update="stream"
+            class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4 md:gap-6"
+          >
+            <%= for {dom_id, entity} <- @streams.entities do %>
+              <div
+                id={dom_id}
+                class="group relative bg-slate-900/20 backdrop-blur-xl border border-white/5 rounded-[2rem] p-1 transition-all duration-500 hover:scale-[1.01] hover:border-cyan-500/30"
+              >
                 <div class="bg-[#0b0d15]/95 rounded-[1.8rem] p-5 h-full flex flex-col border border-white/[0.02]">
                   <!-- Entity Header -->
                   <div class="flex justify-between items-start mb-5">
@@ -281,7 +339,7 @@ defmodule EvolvingMindsWeb.WorldLive do
                   <!-- Memory Stream -->
                   <div class="mt-auto">
                     <div class="space-y-1.5">
-                      <%= for {type, sender} <- Map.get(@memories, entity.id, []) do %>
+                      <%= for {type, sender} <- entity.memories do %>
                         <div class="flex items-center justify-between bg-white/[0.02] p-2 rounded-lg border border-white/5 transition-colors">
                           <div class="flex items-center gap-2">
                             <div class={"w-1.5 h-1.5 rounded-full #{case type do
@@ -304,20 +362,20 @@ defmodule EvolvingMindsWeb.WorldLive do
                 </div>
               </div>
             <% end %>
-
-            <%= if Enum.empty?(@visible_entities) do %>
-              <div class="sm:col-span-2 xl:col-span-3 2xl:col-span-4 min-h-56 flex items-center justify-center rounded-2xl border border-white/10 bg-slate-900/20 p-8 text-center">
-                <div>
-                  <p class="text-xs font-black uppercase tracking-[0.3em] text-slate-500">
-                    No entities match
-                  </p>
-                  <p class="mt-2 text-sm text-slate-600">
-                    Clear the filter or wait for the next generation.
-                  </p>
-                </div>
-              </div>
-            <% end %>
           </div>
+
+          <%= if @visible_count == 0 do %>
+            <div class="min-h-56 flex items-center justify-center rounded-2xl border border-white/10 bg-slate-900/20 p-8 text-center">
+              <div>
+                <p class="text-xs font-black uppercase tracking-[0.3em] text-slate-500">
+                  No entities match
+                </p>
+                <p class="mt-2 text-sm text-slate-600">
+                  Clear the filter or wait for the next generation.
+                </p>
+              </div>
+            </div>
+          <% end %>
         </div>
         <!-- Sidebar for Logs and Stats -->
         <aside class="w-full lg:w-[400px] flex flex-col gap-8">
