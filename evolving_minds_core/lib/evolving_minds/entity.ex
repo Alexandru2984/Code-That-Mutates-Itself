@@ -210,7 +210,9 @@ defmodule EvolvingMinds.Entity do
 
     :telemetry.execute([:evolving_minds, :entity, :death], %{count: 1}, %{
       id: state.id,
-      cause: cause
+      cause: cause,
+      generation: state.generation,
+      age: System.system_time(:second) - state.born_at
     })
 
     Logger.info("Entity #{state.id} died (#{cause}).")

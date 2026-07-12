@@ -47,7 +47,8 @@ defmodule EvolvingMindsWeb.WorldPublisher do
       global_events: GlobalEvents.get_recent_events(),
       stats: Stats.get_history(),
       top_interactions: Stats.get_top_interactions(),
-      epoch: EvolvingMinds.Environment.current_epoch()
+      epoch: EvolvingMinds.Environment.current_epoch(),
+      all_time: EvolvingMinds.AllTimeStats.get_stats()
     }
   end
 

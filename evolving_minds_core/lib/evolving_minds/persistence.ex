@@ -77,7 +77,8 @@ defmodule EvolvingMinds.Persistence do
       saved_at: DateTime.utc_now(),
       epoch: Environment.current_epoch(),
       entities: entities,
-      memories: :ets.tab2list(:entity_memories)
+      memories: :ets.tab2list(:entity_memories),
+      all_time: EvolvingMinds.AllTimeStats.export()
     }
 
     file = path()
@@ -103,6 +104,10 @@ defmodule EvolvingMinds.Persistence do
 
       for {id, memories} <- snapshot.memories do
         Memory.restore(id, memories)
+      end
+
+      if all_time = Map.get(snapshot, :all_time) do
+        EvolvingMinds.AllTimeStats.import(all_time)
       end
 
       Environment.set_epoch(snapshot.epoch)

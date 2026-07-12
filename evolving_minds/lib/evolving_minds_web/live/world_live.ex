@@ -83,6 +83,7 @@ defmodule EvolvingMindsWeb.WorldLive do
     |> assign(:stats, snapshot.stats)
     |> assign(:top_interactions, snapshot.top_interactions)
     |> assign(:epoch, snapshot.epoch)
+    |> assign(:all_time, snapshot.all_time)
     |> assign(:entities, entities)
     |> refresh_stream(entities, opts)
   end
@@ -170,6 +171,12 @@ defmodule EvolvingMindsWeb.WorldLive do
   defp epoch_label(:abundance), do: "Epoch: Abundance"
   defp epoch_label(:famine), do: "Epoch: Famine"
   defp epoch_label(_), do: "Epoch: Normal"
+
+  defp format_age(seconds) when seconds >= 3600,
+    do: "#{div(seconds, 3600)}h #{div(rem(seconds, 3600), 60)}m"
+
+  defp format_age(seconds) when seconds >= 60, do: "#{div(seconds, 60)}m #{rem(seconds, 60)}s"
+  defp format_age(seconds), do: "#{seconds}s"
 
   @impl true
   def render(assigns) do
@@ -587,6 +594,64 @@ defmodule EvolvingMindsWeb.WorldLive do
                 </div>
               <% end %>
             </div>
+          </div>
+          <!-- Hall of Fame -->
+          <div class="bg-slate-900/40 backdrop-blur-3xl border border-white/10 rounded-[2rem] p-6">
+            <h3 class="text-xs font-black text-white uppercase tracking-[0.3em] mb-6">
+              Hall of Fame
+            </h3>
+            <div class="grid grid-cols-2 gap-3 mb-4">
+              <div class="bg-black/40 p-3 rounded-2xl border border-white/5">
+                <span class="text-[8px] text-slate-500 uppercase font-black block mb-1">
+                  Births
+                </span>
+                <span class="text-lg font-black text-emerald-400 tabular-nums">
+                  {@all_time.births}
+                </span>
+              </div>
+              <div class="bg-black/40 p-3 rounded-2xl border border-white/5">
+                <span class="text-[8px] text-slate-500 uppercase font-black block mb-1">
+                  Deaths
+                </span>
+                <span class="text-lg font-black text-rose-400 tabular-nums">
+                  {@all_time.deaths}
+                </span>
+                <span class="text-[8px] font-mono text-slate-600 block">
+                  {Map.get(@all_time.deaths_by_cause, :killed, 0)} killed
+                </span>
+              </div>
+              <div class="bg-black/40 p-3 rounded-2xl border border-white/5">
+                <span class="text-[8px] text-slate-500 uppercase font-black block mb-1">
+                  Mutations
+                </span>
+                <span class="text-lg font-black text-purple-400 tabular-nums">
+                  {@all_time.mutations}
+                </span>
+              </div>
+              <div class="bg-black/40 p-3 rounded-2xl border border-white/5">
+                <span class="text-[8px] text-slate-500 uppercase font-black block mb-1">
+                  Max Gen
+                </span>
+                <span class="text-lg font-black text-cyan-400 tabular-nums">
+                  {@all_time.max_generation}
+                </span>
+              </div>
+            </div>
+            <%= if @all_time.oldest do %>
+              <div class="bg-black/40 p-3 rounded-2xl border border-white/5 flex items-center justify-between">
+                <div>
+                  <span class="text-[8px] text-slate-500 uppercase font-black block mb-0.5">
+                    Oldest Mind Ever
+                  </span>
+                  <span class="text-[10px] font-mono font-bold text-amber-400">
+                    {String.slice(@all_time.oldest.id || "?", 0, 8)}
+                  </span>
+                </div>
+                <span class="text-sm font-black text-amber-400 tabular-nums">
+                  {format_age(@all_time.oldest.age)}
+                </span>
+              </div>
+            <% end %>
           </div>
         </aside>
       </main>
