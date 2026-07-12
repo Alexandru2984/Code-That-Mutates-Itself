@@ -55,7 +55,15 @@ defmodule EvolvingMindsWeb.Telemetry do
       summary("vm.memory.total", unit: {:byte, :kilobyte}),
       summary("vm.total_run_queue_lengths.total"),
       summary("vm.total_run_queue_lengths.cpu"),
-      summary("vm.total_run_queue_lengths.io")
+      summary("vm.total_run_queue_lengths.io"),
+
+      # Simulation Metrics
+      counter("evolving_minds.entity.spawn.count"),
+      counter("evolving_minds.entity.death.count"),
+      counter("evolving_minds.entity.mutation.count"),
+      last_value("evolving_minds.population.size"),
+      last_value("evolving_minds.population.avg_aggression"),
+      last_value("evolving_minds.population.avg_curiosity")
     ]
   end
 
@@ -63,7 +71,26 @@ defmodule EvolvingMindsWeb.Telemetry do
     [
       # A module, function and arguments to be invoked periodically.
       # This function must call :telemetry.execute/3 and a metric must be added above.
-      # {EvolvingMindsWeb, :count_users, []}
+      {__MODULE__, :measure_population, []}
     ]
+  end
+
+  @doc false
+  def measure_population do
+    entities = EvolvingMinds.StateStore.get_all_states()
+    size = length(entities)
+
+    measurements =
+      if size == 0 do
+        %{size: 0, avg_aggression: 0.0, avg_curiosity: 0.0}
+      else
+        %{
+          size: size,
+          avg_aggression: Enum.sum(Enum.map(entities, & &1.traits.aggression)) / size,
+          avg_curiosity: Enum.sum(Enum.map(entities, & &1.traits.curiosity)) / size
+        }
+      end
+
+    :telemetry.execute([:evolving_minds, :population], measurements, %{})
   end
 end

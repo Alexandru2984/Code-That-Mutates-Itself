@@ -39,6 +39,7 @@ defmodule EvolvingMinds.Entity do
     }
 
     EvolvingMinds.StateStore.update_state(id, state)
+    :telemetry.execute([:evolving_minds, :entity, :spawn], %{count: 1}, %{id: id, traits: traits})
     # Delay the first action slightly to allow the supervisor to settle
     Process.send_after(self(), :act, 2000 + :rand.uniform(3000))
     {:ok, state}
@@ -87,6 +88,12 @@ defmodule EvolvingMinds.Entity do
           MutationEngine.mutate(state.traits, state.behavior_source, state.behavior_fn)
 
         EvolvingMinds.GlobalEvents.report_event(%{type: :mutation, entity_id: state.id})
+
+        :telemetry.execute([:evolving_minds, :entity, :mutation], %{count: 1}, %{
+          id: state.id,
+          traits: new_traits
+        })
+
         Logger.info("Entity #{state.id} mutated.")
         %{state | traits: new_traits, behavior_source: new_source, behavior_fn: new_fn}
       else
@@ -97,6 +104,7 @@ defmodule EvolvingMinds.Entity do
 
     if new_state.energy <= 0 do
       EvolvingMinds.GlobalEvents.report_event(%{type: :death, entity_id: new_state.id})
+      :telemetry.execute([:evolving_minds, :entity, :death], %{count: 1}, %{id: new_state.id})
       Logger.info("Entity #{new_state.id} died of exhaustion.")
       # State and memory cleanup happens in StateStore, which monitors this
       # process and purges on :DOWN — the same path crashes take.
