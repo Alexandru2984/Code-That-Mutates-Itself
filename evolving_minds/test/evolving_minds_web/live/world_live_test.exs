@@ -108,6 +108,39 @@ defmodule EvolvingMindsWeb.WorldLiveTest do
     assert eventually(fn -> energy_of(id) == 95 end)
   end
 
+  test "inject_energy is rate limited per client", %{conn: conn} do
+    entities =
+      for i <- 1..6 do
+        {id, pid, cleanup} = spawn_test_entity("RL#{i}")
+        on_exit(cleanup)
+        {id, pid}
+      end
+
+    {:ok, view, _html} = live(conn, "/")
+
+    # Drain everyone to 75 so injections are observable below the cap.
+    for {_id, pid} <- entities, _ <- 1..5, do: send(pid, :act)
+    assert eventually(fn -> Enum.all?(entities, fn {id, _} -> energy_of(id) == 75 end) end)
+
+    results =
+      for {id, _pid} <- entities do
+        render_click(view, "inject_energy", %{"id" => id})
+      end
+
+    # The first five injections land (+20; acts can only lower energy, so
+    # anything above 75 proves the injection happened)...
+    {first_five, [{last_id, _}]} = Enum.split(entities, 5)
+
+    for {id, _} <- first_five do
+      assert eventually(fn -> energy_of(id) > 75 end)
+    end
+
+    # ...while the sixth is rejected and the client is told why.
+    Process.sleep(100)
+    assert energy_of(last_id) <= 75
+    assert List.last(results) =~ "Rate limit reached"
+  end
+
   defp energy_of(id) do
     case StateStore.get_state(id) do
       nil -> nil

@@ -4,6 +4,11 @@ defmodule EvolvingMindsWeb.WorldLive do
   alias EvolvingMinds.World
   alias EvolvingMindsWeb.WorldPublisher
 
+  # Public energy injections are rate limited per connected client:
+  # at most @inject_limit within a sliding @inject_window_ms window.
+  @inject_limit 5
+  @inject_window_ms 10_000
+
   @impl true
   def mount(_params, _session, socket) do
     if connected?(socket), do: WorldPublisher.subscribe()
@@ -13,6 +18,7 @@ defmodule EvolvingMindsWeb.WorldLive do
       |> assign(:query, "")
       |> assign(:sort, "energy_desc")
       |> assign(:prev_visible, [])
+      |> assign(:inject_history, [])
       |> assign(public_controls: Application.get_env(:evolving_minds, :public_controls, false))
       |> stream_configure(:entities, dom_id: &"entity-#{&1.id}")
       |> apply_snapshot(WorldPublisher.snapshot(), reset: true)
@@ -27,11 +33,32 @@ defmodule EvolvingMindsWeb.WorldLive do
 
   @impl true
   def handle_event("inject_energy", %{"id" => id}, socket) do
-    if socket.assigns.public_controls do
-      World.inject_energy(id)
-    end
+    cond do
+      not socket.assigns.public_controls ->
+        {:noreply, socket}
 
-    {:noreply, apply_snapshot(socket, WorldPublisher.snapshot())}
+      true ->
+        now = System.monotonic_time(:millisecond)
+
+        recent =
+          Enum.filter(socket.assigns.inject_history, &(now - &1 < @inject_window_ms))
+
+        if length(recent) < @inject_limit do
+          World.inject_energy(id)
+
+          socket =
+            socket
+            |> assign(:inject_history, [now | recent])
+            |> apply_snapshot(WorldPublisher.snapshot())
+
+          {:noreply, socket}
+        else
+          {:noreply,
+           socket
+           |> assign(:inject_history, recent)
+           |> put_flash(:error, "Rate limit reached — let the minds breathe for a few seconds.")}
+        end
+    end
   end
 
   @impl true
