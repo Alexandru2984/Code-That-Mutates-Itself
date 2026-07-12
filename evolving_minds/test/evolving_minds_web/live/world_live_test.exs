@@ -109,6 +109,35 @@ defmodule EvolvingMindsWeb.WorldLiveTest do
     assert eventually(fn -> energy_of(id) == 95 end)
   end
 
+  test "detail panel opens, tracks, and closes", %{conn: conn} do
+    {id, _pid, cleanup} = spawn_test_entity("DTLS")
+    on_exit(cleanup)
+
+    {:ok, view, _html} = live(conn, "/")
+
+    html = render_click(view, "select_entity", %{"id" => id})
+    assert html =~ "Mind Dossier"
+    assert html =~ "primordial spawn"
+    assert html =~ "Active Heuristic"
+
+    html = render_click(view, "close_entity", %{})
+    refute html =~ "Mind Dossier"
+  end
+
+  test "detail panel reports a death while open", %{conn: conn} do
+    {id, pid, cleanup} = spawn_test_entity("DEAD")
+    on_exit(cleanup)
+
+    {:ok, view, _html} = live(conn, "/")
+    assert render_click(view, "select_entity", %{"id" => id}) =~ "Mind Dossier"
+
+    DynamicSupervisor.terminate_child(EvolvingMinds.EntitySupervisor, pid)
+    assert eventually(fn -> StateStore.get_state(id) == nil end)
+
+    send(view.pid, {:world_update, WorldPublisher.snapshot()})
+    assert render(view) =~ "This mind has died"
+  end
+
   test "inject_energy is rate limited per client", %{conn: conn} do
     entities =
       for i <- 1..6 do

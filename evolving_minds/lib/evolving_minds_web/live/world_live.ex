@@ -19,6 +19,8 @@ defmodule EvolvingMindsWeb.WorldLive do
       |> assign(:sort, "energy_desc")
       |> assign(:prev_visible, [])
       |> assign(:inject_history, [])
+      |> assign(:selected_id, nil)
+      |> assign(:selected, nil)
       |> assign(public_controls: Application.get_env(:evolving_minds, :public_controls, false))
       |> stream_configure(:entities, dom_id: &"entity-#{&1.id}")
       |> apply_snapshot(WorldPublisher.snapshot(), reset: true)
@@ -62,6 +64,16 @@ defmodule EvolvingMindsWeb.WorldLive do
   end
 
   @impl true
+  def handle_event("select_entity", %{"id" => id}, socket) do
+    {:noreply, socket |> assign(:selected_id, id) |> assign(:selected, build_selected(id))}
+  end
+
+  @impl true
+  def handle_event("close_entity", _params, socket) do
+    {:noreply, socket |> assign(:selected_id, nil) |> assign(:selected, nil)}
+  end
+
+  @impl true
   def handle_event("filter_entities", %{"filters" => filters}, socket) do
     query = Map.get(filters, "query", "") |> String.trim()
     sort = Map.get(filters, "sort", "energy_desc")
@@ -85,7 +97,25 @@ defmodule EvolvingMindsWeb.WorldLive do
     |> assign(:epoch, snapshot.epoch)
     |> assign(:all_time, snapshot.all_time)
     |> assign(:entities, entities)
+    |> assign(:selected, build_selected(socket.assigns.selected_id))
     |> refresh_stream(entities, opts)
+  end
+
+  # The detail panel reads fresh state directly; a nil result for a
+  # still-selected id means the mind died while being watched.
+  defp build_selected(nil), do: nil
+
+  defp build_selected(id) do
+    case EvolvingMinds.StateStore.get_state(id) do
+      nil ->
+        nil
+
+      state ->
+        state
+        |> Map.delete(:behavior_fn)
+        |> Map.put(:memories, EvolvingMinds.Memory.get_memories(id))
+        |> Map.put(:age, System.system_time(:second) - state.born_at)
+    end
   end
 
   # Memories ride inside each stream item: a stream card only re-renders
@@ -302,17 +332,28 @@ defmodule EvolvingMindsWeb.WorldLive do
                       </div>
                     </div>
 
-                    <%= if @public_controls do %>
+                    <div class="flex flex-col items-end gap-1.5">
+                      <%= if @public_controls do %>
+                        <button
+                          phx-click="inject_energy"
+                          phx-value-id={entity.id}
+                          class="group/btn relative px-3 py-1.5 rounded-xl border border-cyan-500/30 bg-cyan-500/5 hover:bg-cyan-500/20 transition-all duration-300"
+                        >
+                          <span class="text-[9px] font-black text-cyan-400 uppercase tracking-widest">
+                            + Energy
+                          </span>
+                        </button>
+                      <% end %>
                       <button
-                        phx-click="inject_energy"
+                        phx-click="select_entity"
                         phx-value-id={entity.id}
-                        class="group/btn relative px-3 py-1.5 rounded-xl border border-cyan-500/30 bg-cyan-500/5 hover:bg-cyan-500/20 transition-all duration-300"
+                        class="px-3 py-1.5 rounded-xl border border-white/10 bg-white/[0.02] hover:bg-white/10 transition-all duration-300"
                       >
-                        <span class="text-[9px] font-black text-cyan-400 uppercase tracking-widest">
-                          + Energy
+                        <span class="text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                          Details
                         </span>
                       </button>
-                    <% end %>
+                    </div>
                   </div>
                   <!-- Traits Section -->
                   <div class="grid grid-cols-2 gap-3 mb-6">
@@ -655,6 +696,143 @@ defmodule EvolvingMindsWeb.WorldLive do
           </div>
         </aside>
       </main>
+
+      <%= if @selected_id do %>
+        <div class="fixed inset-0 z-[60] flex justify-end">
+          <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" phx-click="close_entity"></div>
+          <aside
+            id="entity-detail"
+            class="relative w-full max-w-md h-full bg-[#0b0d15] border-l border-white/10 p-6 overflow-y-auto custom-scrollbar"
+          >
+            <div class="flex items-start justify-between mb-6">
+              <div>
+                <h2 class="text-[9px] font-bold text-slate-500 uppercase tracking-[0.3em] mb-1">
+                  Mind Dossier
+                </h2>
+                <p class="text-white font-black text-xl tracking-tight font-mono">
+                  {String.slice(@selected_id, 0, 16)}
+                </p>
+              </div>
+              <button
+                phx-click="close_entity"
+                class="px-3 py-1.5 rounded-xl border border-white/10 bg-white/[0.02] hover:bg-white/10 text-slate-400 text-xs font-black"
+                aria-label="close"
+              >
+                ✕
+              </button>
+            </div>
+
+            <%= if @selected do %>
+              <div class="grid grid-cols-3 gap-3 mb-6">
+                <div class="bg-black/40 p-3 rounded-2xl border border-white/5">
+                  <span class="text-[8px] text-slate-500 uppercase font-black block mb-1">Gen</span>
+                  <span class="text-lg font-black text-purple-400 tabular-nums">
+                    {@selected.generation}
+                  </span>
+                </div>
+                <div class="bg-black/40 p-3 rounded-2xl border border-white/5">
+                  <span class="text-[8px] text-slate-500 uppercase font-black block mb-1">Age</span>
+                  <span class="text-lg font-black text-amber-400 tabular-nums">
+                    {format_age(@selected.age)}
+                  </span>
+                </div>
+                <div class="bg-black/40 p-3 rounded-2xl border border-white/5">
+                  <span class="text-[8px] text-slate-500 uppercase font-black block mb-1">
+                    Energy
+                  </span>
+                  <span class="text-lg font-black text-cyan-400 tabular-nums">
+                    {@selected.energy}%
+                  </span>
+                </div>
+              </div>
+
+              <div class="bg-black/40 p-3 rounded-2xl border border-white/5 mb-6">
+                <span class="text-[8px] text-slate-500 uppercase font-black block mb-1">
+                  Lineage
+                </span>
+                <span class="text-[11px] font-mono text-slate-300">
+                  <%= if @selected.parent_id do %>
+                    Child of {String.slice(@selected.parent_id, 0, 8)}
+                  <% else %>
+                    First of its line — primordial spawn
+                  <% end %>
+                </span>
+              </div>
+
+              <div class="mb-6">
+                <h3 class="text-[9px] uppercase tracking-widest text-cyan-400/80 font-black mb-2">
+                  Traits
+                </h3>
+                <div class="space-y-2">
+                  <div class="flex items-center gap-3">
+                    <span class="text-[9px] font-bold text-slate-500 uppercase w-20">Aggression</span>
+                    <div class="flex-1 h-1.5 bg-black/40 rounded-full overflow-hidden">
+                      <div
+                        class="h-full bg-orange-500"
+                        style={"width: #{@selected.traits.aggression * 100}%"}
+                      >
+                      </div>
+                    </div>
+                    <span class="text-[10px] font-mono font-bold text-orange-400">
+                      {Float.round(@selected.traits.aggression, 2)}
+                    </span>
+                  </div>
+                  <div class="flex items-center gap-3">
+                    <span class="text-[9px] font-bold text-slate-500 uppercase w-20">Curiosity</span>
+                    <div class="flex-1 h-1.5 bg-black/40 rounded-full overflow-hidden">
+                      <div
+                        class="h-full bg-cyan-500"
+                        style={"width: #{@selected.traits.curiosity * 100}%"}
+                      >
+                      </div>
+                    </div>
+                    <span class="text-[10px] font-mono font-bold text-cyan-400">
+                      {Float.round(@selected.traits.curiosity, 2)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="mb-6">
+                <h3 class="text-[9px] uppercase tracking-widest text-cyan-400/80 font-black mb-2">
+                  Active Heuristic
+                </h3>
+                <pre class="text-[10px] leading-relaxed bg-[#05060a] border border-white/[0.05] p-3 rounded-xl text-cyan-100/50 font-mono overflow-x-auto custom-scrollbar">{@selected.behavior_source}</pre>
+              </div>
+
+              <div>
+                <h3 class="text-[9px] uppercase tracking-widest text-cyan-400/80 font-black mb-2">
+                  Memory Stream ({length(@selected.memories)})
+                </h3>
+                <div class="space-y-1.5">
+                  <%= for {type, sender} <- Enum.take(@selected.memories, 30) do %>
+                    <div class="flex items-center justify-between bg-white/[0.02] p-2 rounded-lg border border-white/5">
+                      <span class="text-[9px] font-bold text-slate-400 uppercase">{type}</span>
+                      <span class="text-[8px] font-mono text-slate-600">
+                        ← {String.slice(sender, 0, 8)}
+                      </span>
+                    </div>
+                  <% end %>
+                  <%= if Enum.empty?(@selected.memories) do %>
+                    <p class="text-[9px] text-slate-600 uppercase tracking-widest py-2">
+                      No memories yet
+                    </p>
+                  <% end %>
+                </div>
+              </div>
+            <% else %>
+              <div class="bg-rose-500/10 border border-rose-500/30 rounded-2xl p-6 text-center">
+                <p class="text-xs font-black uppercase tracking-[0.3em] text-rose-400 mb-2">
+                  This mind has died
+                </p>
+                <p class="text-[11px] text-slate-500">
+                  Its state and memories have been purged from the world.
+                </p>
+              </div>
+            <% end %>
+          </aside>
+        </div>
+      <% end %>
 
       <style>
         .custom-scrollbar::-webkit-scrollbar {
