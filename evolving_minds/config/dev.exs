@@ -8,8 +8,10 @@ import Config
 # to bundle .js and .css sources.
 config :evolving_minds, EvolvingMindsWeb.Endpoint,
   # Binding to loopback ipv4 address prevents access from other machines.
-  # Change to `ip: {0, 0, 0, 0}` to allow access from other machines.
-  http: [ip: {0, 0, 0, 0}, port: 4000],
+  # This matters on a public VPS: the dev endpoint has no origin checks and
+  # runs the code reloader. Change to `ip: {0, 0, 0, 0}` only on trusted
+  # networks, or tunnel instead: ssh -L 4000:localhost:4000 <host>
+  http: [ip: {127, 0, 0, 1}, port: 4000],
   check_origin: false,
   code_reloader: true,
   debug_errors: true,
