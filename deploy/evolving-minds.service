@@ -1,0 +1,17 @@
+[Unit]
+Description=Evolving Minds (Phoenix release)
+After=network.target
+
+[Service]
+Type=exec
+User=micu
+WorkingDirectory=/home/micu/testing_elixir/evolving_minds
+EnvironmentFile=/home/micu/testing_elixir/evolving_minds/.env.prod
+Environment=PHX_SERVER=true
+ExecStart=/home/micu/testing_elixir/evolving_minds/_build/prod/rel/evolving_minds/bin/evolving_minds start
+ExecStop=/home/micu/testing_elixir/evolving_minds/_build/prod/rel/evolving_minds/bin/evolving_minds stop
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

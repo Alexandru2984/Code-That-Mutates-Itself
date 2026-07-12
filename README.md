@@ -68,7 +68,13 @@ Tests disable the Evolution Engine (`:start_evolution` config) so they run again
 
 ## 🚀 Production
 
-The app runs behind Nginx (WebSocket proxying for LiveView) with TLS via Let's Encrypt/Certbot. Runtime configuration is environment-driven (`config/runtime.exs`):
+The app ships as a **mix release** managed by systemd behind Nginx (WebSocket proxying for LiveView) with TLS via Let's Encrypt/Certbot. Everything deploy-related is versioned in `deploy/`:
+
+```bash
+./deploy/deploy.sh   # deps + prod compile + assets + release + unit sync + restart + health check
+```
+
+Runtime configuration is environment-driven (`config/runtime.exs`), loaded by systemd from `.env.prod` (not committed):
 
 | Variable | Purpose |
 | --- | --- |
@@ -81,7 +87,6 @@ The app runs behind Nginx (WebSocket proxying for LiveView) with TLS via Let's E
 | `WORLD_PUBLIC_CONTROLS` | Opt-in: lets visitors inject energy into entities |
 | `DNS_CLUSTER_QUERY` | Optional DNS-based clustering |
 
-Build assets before deploying: `mix assets.deploy`.
 
 ## 🧪 Experiments
 
