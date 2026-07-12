@@ -68,11 +68,26 @@ defmodule EvolvingMinds.StateStore do
   # Monitor the writer once per entity id so any kind of termination
   # (normal death or crash) triggers a purge.
   defp track(state, id, pid) do
-    if Map.has_key?(state.ids, id) do
-      state
-    else
-      ref = Process.monitor(pid)
-      %{state | refs: Map.put(state.refs, ref, id), ids: Map.put(state.ids, id, ref)}
+    case Map.get(state.ids, id) do
+      {_ref, ^pid} ->
+        state
+
+      {old_ref, _old_pid} ->
+        # The id was taken over by a new process (e.g. a supervisor restart)
+        # before the old writer's :DOWN was processed. Drop the stale monitor
+        # so it cannot purge the new writer's state.
+        Process.demonitor(old_ref, [:flush])
+        ref = Process.monitor(pid)
+
+        %{
+          state
+          | refs: state.refs |> Map.delete(old_ref) |> Map.put(ref, id),
+            ids: Map.put(state.ids, id, {ref, pid})
+        }
+
+      nil ->
+        ref = Process.monitor(pid)
+        %{state | refs: Map.put(state.refs, ref, id), ids: Map.put(state.ids, id, {ref, pid})}
     end
   end
 
@@ -81,7 +96,7 @@ defmodule EvolvingMinds.StateStore do
       {nil, _ids} ->
         state
 
-      {ref, ids} ->
+      {{ref, _pid}, ids} ->
         Process.demonitor(ref, [:flush])
         %{state | ids: ids, refs: Map.delete(state.refs, ref)}
     end

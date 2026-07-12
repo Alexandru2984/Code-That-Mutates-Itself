@@ -23,6 +23,17 @@ defmodule EvolvingMindsWeb.WorldLiveTest do
     {id, pid, on_exit_kill}
   end
 
+  test "GET / renders the dashboard shell (disconnected render)", %{conn: conn} do
+    conn = get(conn, ~p"/")
+    response = html_response(conn, 200)
+
+    assert response =~ "Evolving"
+    assert response =~ "Autonomous Heuristic Simulator"
+    assert response =~ "Filter entity ID"
+    assert response =~ "Energy high"
+    assert response =~ "Visible"
+  end
+
   test "renders the world dashboard with entities", %{conn: conn} do
     {id, _pid, cleanup} = spawn_test_entity("RNDR")
     on_exit(cleanup)
