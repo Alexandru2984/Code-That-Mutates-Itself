@@ -29,18 +29,22 @@ defmodule EvolvingMinds.EvolutionEngine do
     entities = World.get_all_entities()
     population_size = length(entities)
 
-    Logger.info("Evaluating world. Population size: #{population_size}")
+    Logger.debug("Evaluating world. Population size: #{population_size}")
+
+    max_population = 50
 
     if population_size < 3 do
-      Logger.info("Population low. Spawning new entities.")
+      Logger.debug("Population low. Spawning new entities.")
       World.spawn_entity()
       World.spawn_entity()
+      EvolvingMinds.GlobalEvents.report_event(%{type: :birth, detail: "Population low"})
     end
 
-    if population_size > 0 and :rand.uniform() > 0.5 do
+    if population_size > 0 and population_size < max_population and :rand.uniform() > 0.5 do
       parent = Enum.random(entities)
-      Logger.info("Entity #{parent} reproduced.")
+      Logger.debug("Entity #{parent} reproduced.")
       World.spawn_entity()
+      EvolvingMinds.GlobalEvents.report_event(%{type: :reproduction, parent_id: parent})
     end
 
     Process.send_after(self(), :evaluate, 10000)

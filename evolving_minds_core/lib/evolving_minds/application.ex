@@ -1,4 +1,6 @@
 defmodule EvolvingMinds.Application do
+  @moduledoc false
+
   use Application
 
   @impl true
@@ -6,6 +8,9 @@ defmodule EvolvingMinds.Application do
     children = [
       {Registry, keys: :unique, name: EvolvingMinds.EntityRegistry},
       EvolvingMinds.Memory,
+      EvolvingMinds.StateStore,
+      EvolvingMinds.GlobalEvents,
+      EvolvingMinds.Stats,
       {DynamicSupervisor, strategy: :one_for_one, name: EvolvingMinds.EntitySupervisor},
       EvolvingMinds.EvolutionEngine
     ]

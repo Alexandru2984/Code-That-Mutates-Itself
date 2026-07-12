@@ -25,9 +25,29 @@ defmodule EvolvingMinds.MutationEngine do
     """
   end
 
-  def compile_behavior(source_code) do
-    {fun, _} = Code.eval_string(source_code)
-    fun
+  # Builds a behavior closure directly from traits — no dynamic code compilation.
+  def compile_behavior(traits) do
+    aggression = Map.get(traits, :aggression, 0.5)
+    curiosity = Map.get(traits, :curiosity, 0.5)
+
+    base_response = if aggression > 0.7, do: :attack, else: :greet
+    secondary_response = if curiosity > 0.6, do: :share_knowledge, else: :ignore
+
+    fn
+      {:greet, sender_id} ->
+        if :rand.uniform() > 0.5,
+          do: {base_response, sender_id},
+          else: {secondary_response, sender_id}
+
+      {:attack, sender_id} ->
+        {:flee, sender_id}
+
+      {:share_knowledge, sender_id} ->
+        {:greet, sender_id}
+
+      _ ->
+        {:ignore, nil}
+    end
   end
 
   def mutate(traits, current_source, current_fn) do
@@ -38,7 +58,7 @@ defmodule EvolvingMinds.MutationEngine do
 
     if :rand.uniform() > 0.8 do
       new_source = generate_behavior(new_traits)
-      {new_traits, new_source, compile_behavior(new_source)}
+      {new_traits, new_source, compile_behavior(new_traits)}
     else
       # Reuse existing compiled function — no recompilation needed
       {new_traits, current_source, current_fn}

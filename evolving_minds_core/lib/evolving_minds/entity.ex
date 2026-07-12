@@ -28,7 +28,7 @@ defmodule EvolvingMinds.Entity do
     }
 
     source_code = MutationEngine.generate_behavior(traits)
-    behavior_fn = MutationEngine.compile_behavior(source_code)
+    behavior_fn = MutationEngine.compile_behavior(traits)
 
     state = %{
       id: id,
@@ -38,6 +38,7 @@ defmodule EvolvingMinds.Entity do
       energy: 100
     }
 
+    EvolvingMinds.StateStore.update_state(id, state)
     # Delay the first action slightly to allow the supervisor to settle
     Process.send_after(self(), :act, 2000 + :rand.uniform(3000))
     {:ok, state}
@@ -59,7 +60,15 @@ defmodule EvolvingMinds.Entity do
           {:ignore, nil}
       end
 
+    EvolvingMinds.StateStore.update_state(state.id, state)
     {:noreply, state}
+  end
+
+  def handle_cast(:inject_energy, state) do
+    new_energy = min(100, state.energy + 20)
+    new_state = %{state | energy: new_energy}
+    EvolvingMinds.StateStore.update_state(state.id, new_state)
+    {:noreply, new_state}
   end
 
   def handle_info(:act, state) do
@@ -77,6 +86,7 @@ defmodule EvolvingMinds.Entity do
         {new_traits, new_source, new_fn} =
           MutationEngine.mutate(state.traits, state.behavior_source, state.behavior_fn)
 
+        EvolvingMinds.GlobalEvents.report_event(%{type: :mutation, entity_id: state.id})
         Logger.info("Entity #{state.id} mutated.")
         %{state | traits: new_traits, behavior_source: new_source, behavior_fn: new_fn}
       else
@@ -86,9 +96,13 @@ defmodule EvolvingMinds.Entity do
     new_state = %{new_state | energy: new_state.energy - 5}
 
     if new_state.energy <= 0 do
+      EvolvingMinds.GlobalEvents.report_event(%{type: :death, entity_id: new_state.id})
+      EvolvingMinds.StateStore.remove_state(new_state.id)
+      EvolvingMinds.Memory.forget(new_state.id)
       Logger.info("Entity #{new_state.id} died of exhaustion.")
       {:stop, :normal, new_state}
     else
+      EvolvingMinds.StateStore.update_state(new_state.id, new_state)
       Process.send_after(self(), :act, 2000 + :rand.uniform(3000))
       {:noreply, new_state}
     end

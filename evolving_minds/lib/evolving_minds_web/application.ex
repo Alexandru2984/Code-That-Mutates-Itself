@@ -1,5 +1,7 @@
-defmodule EvolvingMinds.Application do
-  # See https://hexdocs.pm/elixir/Application.html
+defmodule EvolvingMindsWeb.Application do
+  # The web-facing OTP application. The simulation itself lives in the
+  # :evolving_minds_core dependency and is started by its own supervision
+  # tree before this one. See https://hexdocs.pm/elixir/Application.html
   # for more information on OTP Applications
   @moduledoc false
 
@@ -11,20 +13,13 @@ defmodule EvolvingMinds.Application do
       EvolvingMindsWeb.Telemetry,
       {DNSCluster, query: Application.get_env(:evolving_minds, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: EvolvingMinds.PubSub},
-      {Registry, keys: :unique, name: EvolvingMinds.EntityRegistry},
-      EvolvingMinds.Memory,
-      EvolvingMinds.StateStore,
-      EvolvingMinds.GlobalEvents,
-      EvolvingMinds.Stats,
-      {DynamicSupervisor, strategy: :one_for_one, name: EvolvingMinds.EntitySupervisor},
-      EvolvingMinds.EvolutionEngine,
       # Start to serve requests, typically the last entry
       EvolvingMindsWeb.Endpoint
     ]
 
     # See https://hexdocs.pm/elixir/Supervisor.html
     # for other strategies and supported options
-    opts = [strategy: :one_for_one, name: EvolvingMinds.Supervisor]
+    opts = [strategy: :one_for_one, name: EvolvingMindsWeb.Supervisor]
     Supervisor.start_link(children, opts)
   end
 

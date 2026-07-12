@@ -32,4 +32,14 @@ defmodule EvolvingMinds.World do
         :ok
     end
   end
+
+  def inject_energy(target_id) do
+    case Registry.lookup(EvolvingMinds.EntityRegistry, target_id) do
+      [{pid, _}] ->
+        GenServer.cast(pid, :inject_energy)
+
+      [] ->
+        :ok
+    end
+  end
 end

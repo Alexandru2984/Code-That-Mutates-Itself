@@ -18,7 +18,7 @@ defmodule EvolvingMinds.MixProject do
   # Type `mix help compile.app` for more information.
   def application do
     [
-      mod: {EvolvingMinds.Application, []},
+      mod: {EvolvingMindsWeb.Application, []},
       extra_applications: [:logger, :runtime_tools, :crypto]
     ]
   end
@@ -32,6 +32,7 @@ defmodule EvolvingMinds.MixProject do
   # Type `mix help deps` for examples and options.
   defp deps do
     [
+      {:evolving_minds_core, path: "../evolving_minds_core"},
       {:phoenix, "~> 1.7.14"},
       {:phoenix_html, "~> 3.3"},
       {:phoenix_live_reload, "~> 1.2", only: :dev},
