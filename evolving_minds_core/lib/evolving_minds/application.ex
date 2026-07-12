@@ -12,6 +12,7 @@ defmodule EvolvingMinds.Application do
         EvolvingMinds.StateStore,
         EvolvingMinds.GlobalEvents,
         EvolvingMinds.Stats,
+        EvolvingMinds.Environment,
         {DynamicSupervisor, strategy: :one_for_one, name: EvolvingMinds.EntitySupervisor}
       ] ++ evolution_children()
 

@@ -82,6 +82,7 @@ defmodule EvolvingMindsWeb.WorldLive do
     |> assign(:global_events, snapshot.global_events)
     |> assign(:stats, snapshot.stats)
     |> assign(:top_interactions, snapshot.top_interactions)
+    |> assign(:epoch, snapshot.epoch)
     |> assign(:entities, entities)
     |> refresh_stream(entities, opts)
   end
@@ -162,6 +163,14 @@ defmodule EvolvingMindsWeb.WorldLive do
 
   defp sort_entities(entities, _), do: Enum.sort_by(entities, & &1.energy, :desc)
 
+  defp epoch_class(:abundance), do: "text-emerald-400"
+  defp epoch_class(:famine), do: "text-rose-400"
+  defp epoch_class(_), do: "text-slate-500"
+
+  defp epoch_label(:abundance), do: "Epoch: Abundance"
+  defp epoch_label(:famine), do: "Epoch: Famine"
+  defp epoch_label(_), do: "Epoch: Normal"
+
   @impl true
   def render(assigns) do
     ~H"""
@@ -238,8 +247,8 @@ defmodule EvolvingMindsWeb.WorldLive do
                   Uplink Active
                 </span>
               </div>
-              <span class="text-[8px] text-slate-500 font-medium tracking-tight">
-                BEAM Cluster Online
+              <span class={"text-[9px] font-mono font-bold uppercase tracking-widest #{epoch_class(@epoch)}"}>
+                {epoch_label(@epoch)}
               </span>
             </div>
           </div>
@@ -429,6 +438,7 @@ defmodule EvolvingMindsWeb.WorldLive do
                       :mutation -> "text-purple-400"
                       :birth -> "text-emerald-400"
                       :reproduction -> "text-cyan-400"
+                      :epoch_change -> "text-amber-400"
                       _ -> "text-slate-400"
                     end}"}>
                       {event.type}

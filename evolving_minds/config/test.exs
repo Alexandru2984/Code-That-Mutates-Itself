@@ -2,7 +2,7 @@ import Config
 
 # Tests run against a world they fully control: no background seeding,
 # reproduction, or evaluation from the EvolutionEngine.
-config :evolving_minds_core, start_evolution: false
+config :evolving_minds_core, start_evolution: false, cycle_epochs: false
 
 # We don't run a server during test. If one is required,
 # you can enable the server option below.

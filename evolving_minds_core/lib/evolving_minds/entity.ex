@@ -39,7 +39,6 @@ defmodule EvolvingMinds.Entity do
   @share_bonus 6
   @betrayal_gain 5
   @betrayal_damage 8
-  @act_cost 5
   @max_energy 100
 
   def start_link(args \\ []) do
@@ -160,7 +159,7 @@ defmodule EvolvingMinds.Entity do
         state
       end
 
-    case apply_energy(new_state, -@act_cost, :exhaustion) do
+    case apply_energy(new_state, -EvolvingMinds.Environment.act_cost(), :exhaustion) do
       {:noreply, live_state} ->
         Process.send_after(self(), :act, 2000 + :rand.uniform(3000))
         {:noreply, live_state}
