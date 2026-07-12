@@ -97,9 +97,9 @@ defmodule EvolvingMinds.Entity do
 
     if new_state.energy <= 0 do
       EvolvingMinds.GlobalEvents.report_event(%{type: :death, entity_id: new_state.id})
-      EvolvingMinds.StateStore.remove_state(new_state.id)
-      EvolvingMinds.Memory.forget(new_state.id)
       Logger.info("Entity #{new_state.id} died of exhaustion.")
+      # State and memory cleanup happens in StateStore, which monitors this
+      # process and purges on :DOWN — the same path crashes take.
       {:stop, :normal, new_state}
     else
       EvolvingMinds.StateStore.update_state(new_state.id, new_state)
