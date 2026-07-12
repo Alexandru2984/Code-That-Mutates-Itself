@@ -21,6 +21,7 @@ defmodule EvolvingMindsWeb.WorldLive do
       |> assign(:inject_history, [])
       |> assign(:selected_id, nil)
       |> assign(:selected, nil)
+      |> assign(:show_about, false)
       |> assign(public_controls: Application.get_env(:evolving_minds, :public_controls, false))
       |> stream_configure(:entities, dom_id: &"entity-#{&1.id}")
       |> apply_snapshot(WorldPublisher.snapshot(), reset: true)
@@ -71,6 +72,11 @@ defmodule EvolvingMindsWeb.WorldLive do
   @impl true
   def handle_event("close_entity", _params, socket) do
     {:noreply, socket |> assign(:selected_id, nil) |> assign(:selected, nil)}
+  end
+
+  @impl true
+  def handle_event("toggle_about", _params, socket) do
+    {:noreply, assign(socket, :show_about, not socket.assigns.show_about)}
   end
 
   @impl true
@@ -208,6 +214,33 @@ defmodule EvolvingMindsWeb.WorldLive do
   defp format_age(seconds) when seconds >= 60, do: "#{div(seconds, 60)}m #{rem(seconds, 60)}s"
   defp format_age(seconds), do: "#{seconds}s"
 
+  defp population_points(stats) when length(stats) > 1 do
+    max_pop = stats |> Enum.map(& &1.population) |> Enum.max() |> max(1)
+    n = length(stats)
+
+    stats
+    |> Enum.reverse()
+    |> Enum.with_index()
+    |> Enum.map_join(" ", fn {s, i} ->
+      "#{i * (100 / (n - 1))},#{100 - s.population / max_pop * 90}"
+    end)
+  end
+
+  defp population_points(_), do: nil
+
+  # 10-bucket distribution of a trait across the living population,
+  # as {count, percent-of-max} pairs for bar heights.
+  defp histogram(entities, trait) do
+    counts =
+      Enum.reduce(entities, List.duplicate(0, 10), fn entity, acc ->
+        bucket = min(9, trunc(Map.fetch!(entity.traits, trait) * 10))
+        List.update_at(acc, bucket, &(&1 + 1))
+      end)
+
+    max_count = max(Enum.max(counts), 1)
+    Enum.map(counts, &{&1, round(&1 / max_count * 100)})
+  end
+
   @impl true
   def render(assigns) do
     ~H"""
@@ -288,6 +321,14 @@ defmodule EvolvingMindsWeb.WorldLive do
                 {epoch_label(@epoch)}
               </span>
             </div>
+            <button
+              phx-click="toggle_about"
+              class="ml-2 px-3 py-2 rounded-xl border border-white/10 bg-white/[0.02] hover:bg-white/10 transition-all duration-300"
+            >
+              <span class="text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                What is this?
+              </span>
+            </button>
           </div>
         </div>
       </header>
@@ -602,6 +643,74 @@ defmodule EvolvingMindsWeb.WorldLive do
                   </p>
                 </div>
               <% end %>
+              <!-- Population over time -->
+              <div>
+                <div class="flex justify-between items-center mb-1.5">
+                  <span class="text-[8px] uppercase tracking-widest text-slate-500 font-bold">
+                    Population
+                  </span>
+                  <span class="text-[9px] font-mono font-bold text-emerald-400">
+                    {@total_population}
+                  </span>
+                </div>
+                <div class="h-16 w-full bg-black/40 rounded-2xl border border-white/5 p-3">
+                  <%= if points = population_points(@stats) do %>
+                    <svg class="w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
+                      <polyline
+                        fill="none"
+                        stroke="#34d399"
+                        stroke-width="3"
+                        stroke-linecap="round"
+                        points={points}
+                      />
+                    </svg>
+                  <% else %>
+                    <div class="h-full flex items-center justify-center opacity-20">
+                      <span class="text-[8px] font-bold text-slate-500 uppercase tracking-widest">
+                        Collecting...
+                      </span>
+                    </div>
+                  <% end %>
+                </div>
+              </div>
+              <!-- Trait distribution histograms -->
+              <div>
+                <span class="text-[8px] uppercase tracking-widest text-slate-500 font-bold block mb-1.5">
+                  Trait Distribution
+                </span>
+                <div class="grid grid-cols-2 gap-3">
+                  <div class="bg-black/40 rounded-2xl border border-white/5 p-3">
+                    <div class="flex items-end gap-0.5 h-12">
+                      <%= for {count, pct} <- histogram(@entities, :aggression) do %>
+                        <div
+                          class="flex-1 bg-orange-500/70 rounded-t-sm"
+                          style={"height: #{max(pct, 4)}%"}
+                          title={"#{count}"}
+                        >
+                        </div>
+                      <% end %>
+                    </div>
+                    <span class="text-[7px] font-bold text-orange-400/80 uppercase block mt-1.5">
+                      Aggression 0 → 1
+                    </span>
+                  </div>
+                  <div class="bg-black/40 rounded-2xl border border-white/5 p-3">
+                    <div class="flex items-end gap-0.5 h-12">
+                      <%= for {count, pct} <- histogram(@entities, :curiosity) do %>
+                        <div
+                          class="flex-1 bg-cyan-500/70 rounded-t-sm"
+                          style={"height: #{max(pct, 4)}%"}
+                          title={"#{count}"}
+                        >
+                        </div>
+                      <% end %>
+                    </div>
+                    <span class="text-[7px] font-bold text-cyan-400/80 uppercase block mt-1.5">
+                      Curiosity 0 → 1
+                    </span>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
           <!-- Top Connections -->
@@ -696,6 +805,67 @@ defmodule EvolvingMindsWeb.WorldLive do
           </div>
         </aside>
       </main>
+
+      <%= if @show_about do %>
+        <div class="fixed inset-0 z-[70] flex items-center justify-center p-4">
+          <div class="absolute inset-0 bg-black/70 backdrop-blur-sm" phx-click="toggle_about"></div>
+          <div class="relative w-full max-w-2xl max-h-[85vh] overflow-y-auto custom-scrollbar bg-[#0b0d15] border border-white/10 rounded-[2rem] p-8">
+            <div class="flex items-start justify-between mb-6">
+              <h2 class="text-xl font-black text-white">
+                What is
+                <span class="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-indigo-500">
+                  Evolving Minds
+                </span>
+                ?
+              </h2>
+              <button
+                phx-click="toggle_about"
+                class="px-3 py-1.5 rounded-xl border border-white/10 bg-white/[0.02] hover:bg-white/10 text-slate-400 text-xs font-black"
+                aria-label="close"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div class="space-y-4 text-sm text-slate-400 leading-relaxed">
+              <p>
+                You are watching a
+                <strong class="text-slate-200">live artificial-life simulation</strong>
+                running on the Erlang virtual machine. Every card is an autonomous process — a
+                digital mind with two inherited traits,
+                <span class="text-orange-400">aggression</span>
+                and <span class="text-cyan-400">curiosity</span>, that decide how it treats others.
+              </p>
+              <p>
+                Minds act on their own timers: they greet or attack whoever they meet, and every
+                interaction settles in <strong class="text-slate-200">energy</strong>. Robbing a
+                fleeing pacifist pays; picking a fight with another warrior bleeds both sides;
+                sharing knowledge between curious minds compounds for everyone. Run out of energy
+                and you die — of exhaustion, or by someone's hand.
+              </p>
+              <p>
+                The fittest minds reproduce: parents are drawn proportionally to their energy, and
+                children inherit slightly mutated traits. Add shifting epochs of
+                <span class="text-emerald-400">abundance</span>
+                and <span class="text-rose-400">famine</span>, and what you get is real,
+                frequency-dependent natural selection — watch the trait averages drift in the
+                sidebar as strategies win and lose.
+              </p>
+              <p>
+                The world is <strong class="text-slate-200">persistent</strong>: it survives
+                restarts and deploys, and the Hall of Fame remembers every generation. Click
+                <em>Details</em>
+                on any card to read a mind's memories and the heuristic it is
+                currently running.
+              </p>
+              <p class="text-[11px] text-slate-600 pt-2 border-t border-white/5">
+                Built with Elixir, Phoenix LiveView, and the BEAM — every mind is a supervised
+                GenServer process. No JavaScript frameworks, no runtime code evaluation.
+              </p>
+            </div>
+          </div>
+        </div>
+      <% end %>
 
       <%= if @selected_id do %>
         <div class="fixed inset-0 z-[60] flex justify-end">

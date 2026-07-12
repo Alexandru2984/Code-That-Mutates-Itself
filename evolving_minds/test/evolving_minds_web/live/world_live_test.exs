@@ -138,6 +138,30 @@ defmodule EvolvingMindsWeb.WorldLiveTest do
     assert render(view) =~ "This mind has died"
   end
 
+  test "about modal explains the world and toggles", %{conn: conn} do
+    # Phrases unique to the modal body — the meta tags in <head> also
+    # mention the simulation, so assertions must not collide with them.
+    {:ok, view, html} = live(conn, "/")
+    refute html =~ "fleeing pacifist pays"
+
+    html = render_click(view, "toggle_about", %{})
+    assert html =~ "fleeing pacifist pays"
+    assert html =~ "frequency-dependent"
+
+    refute render_click(view, "toggle_about", %{}) =~ "fleeing pacifist pays"
+  end
+
+  test "sidebar shows charts and hall of fame", %{conn: conn} do
+    {_id, _pid, cleanup} = spawn_test_entity("CHRT")
+    on_exit(cleanup)
+
+    {:ok, _view, html} = live(conn, "/")
+
+    assert html =~ "Trait Distribution"
+    assert html =~ "Hall of Fame"
+    assert html =~ "Population"
+  end
+
   test "inject_energy is rate limited per client", %{conn: conn} do
     entities =
       for i <- 1..6 do

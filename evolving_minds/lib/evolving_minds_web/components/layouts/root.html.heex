@@ -4,8 +4,25 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="csrf-token" content={get_csrf_token()} />
-    <.live_title suffix=" · EvolvingMinds">
-      {assigns[:page_title] || "EvolvingMinds"}
+    <meta
+      name="description"
+      content="Evolving Minds: a live artificial-life simulation on the BEAM. Digital minds fight, cooperate, mutate, reproduce, and die — watch natural selection happen in real time."
+    />
+    <meta name="theme-color" content="#050608" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Evolving Minds" />
+    <meta property="og:title" content="Evolving Minds — live artificial life on the BEAM" />
+    <meta
+      property="og:description"
+      content="Digital minds fight, cooperate, mutate, reproduce, and die under real selection pressure. A persistent world built with Elixir and Phoenix LiveView."
+    />
+    <meta name="twitter:card" content="summary" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧠</text></svg>"
+    />
+    <.live_title suffix=" · Evolving Minds">
+      {assigns[:page_title] || "Live Artificial Life"}
     </.live_title>
     <link phx-track-static rel="stylesheet" href={~p"/assets/app.css"} />
     <script defer phx-track-static type="text/javascript" src={~p"/assets/app.js"}>
