@@ -7,19 +7,21 @@ defmodule EvolvingMinds.EvolutionEngineTest do
 
   # The engine is disabled in test config; this test starts one on purpose
   # and cleans up every entity it seeded.
-  test "seeds an initial population on startup" do
-    before_ids = MapSet.new(World.get_all_entities())
+  test "seeds an initial population when the world is empty" do
+    # Seeding only happens in an empty world, and registry entries of
+    # entities terminated by earlier tests disappear asynchronously —
+    # so empty the world explicitly and wait for it.
+    cleanup_new_entities(MapSet.new())
+    assert eventually(fn -> World.get_all_entities() == [] end)
 
     pid = start_supervised!(EvolutionEngine)
 
-    assert eventually(fn ->
-             length(World.get_all_entities()) >= MapSet.size(before_ids) + 5
-           end)
+    assert eventually(fn -> length(World.get_all_entities()) >= 5 end)
 
     stop_supervised!(EvolutionEngine)
     refute Process.alive?(pid)
 
-    cleanup_new_entities(before_ids)
+    cleanup_new_entities(MapSet.new())
   end
 
   test "reproduction spawns a child inheriting the parent's lineage" do

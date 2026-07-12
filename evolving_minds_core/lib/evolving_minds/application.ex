@@ -13,7 +13,11 @@ defmodule EvolvingMinds.Application do
         EvolvingMinds.GlobalEvents,
         EvolvingMinds.Stats,
         EvolvingMinds.Environment,
-        {DynamicSupervisor, strategy: :one_for_one, name: EvolvingMinds.EntitySupervisor}
+        {DynamicSupervisor, strategy: :one_for_one, name: EvolvingMinds.EntitySupervisor},
+        # Persistence restores the world before the EvolutionEngine decides
+        # whether seeding is needed, and snapshots it on shutdown (children
+        # stop in reverse order, so entities are still alive when it saves).
+        EvolvingMinds.Persistence
       ] ++ evolution_children()
 
     opts = [strategy: :one_for_one, name: EvolvingMinds.Supervisor]

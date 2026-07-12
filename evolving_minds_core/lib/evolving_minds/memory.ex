@@ -18,6 +18,11 @@ defmodule EvolvingMinds.Memory do
     GenServer.call(__MODULE__, {:forget, entity_id})
   end
 
+  @doc "Bulk-loads an entity's memories (world restores after restarts)."
+  def restore(entity_id, memories) when is_list(memories) do
+    GenServer.call(__MODULE__, {:restore, entity_id, memories})
+  end
+
   def get_memories(entity_id) do
     case :ets.lookup(:entity_memories, entity_id) do
       [{^entity_id, memories}] -> memories
@@ -57,6 +62,11 @@ defmodule EvolvingMinds.Memory do
 
   def handle_call({:forget, entity_id}, _from, state) do
     :ets.delete(:entity_memories, entity_id)
+    {:reply, :ok, state}
+  end
+
+  def handle_call({:restore, entity_id, memories}, _from, state) do
+    :ets.insert(:entity_memories, {entity_id, Enum.take(memories, 100)})
     {:reply, :ok, state}
   end
 end
