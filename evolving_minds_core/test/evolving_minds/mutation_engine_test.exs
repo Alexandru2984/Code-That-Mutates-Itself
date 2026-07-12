@@ -57,6 +57,21 @@ defmodule EvolvingMinds.MutationEngineTest do
     end
   end
 
+  describe "inherit/1" do
+    test "children stay within jitter range and valid bounds" do
+      parent = %{aggression: 0.95, curiosity: 0.05}
+
+      for _ <- 1..200 do
+        child = MutationEngine.inherit(parent)
+
+        assert child.aggression >= 0.0 and child.aggression <= 1.0
+        assert child.curiosity >= 0.0 and child.curiosity <= 1.0
+        assert abs(child.aggression - parent.aggression) <= 0.15
+        assert abs(child.curiosity - parent.curiosity) <= 0.15
+      end
+    end
+  end
+
   describe "mutate/3" do
     test "keeps traits within [0.0, 1.0] across many generations" do
       initial = %{aggression: 1.0, curiosity: 0.0}

@@ -30,6 +30,9 @@ defmodule EvolvingMinds.EntityTest do
     assert state.traits.curiosity >= 0.0 and state.traits.curiosity <= 1.0
     assert is_binary(state.behavior_source)
     assert is_function(state.behavior_fn, 1)
+    assert state.generation == 1
+    assert state.parent_id == nil
+    assert is_integer(state.born_at)
   end
 
   test "records received messages in memory" do

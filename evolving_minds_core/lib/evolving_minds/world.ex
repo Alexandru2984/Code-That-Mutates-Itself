@@ -3,15 +3,26 @@ defmodule EvolvingMinds.World do
   Manages the entities, messaging, and evolution.
   """
 
-  def spawn_entity() do
-    DynamicSupervisor.start_child(EvolvingMinds.EntitySupervisor, EvolvingMinds.Entity)
+  @doc """
+  Spawns an entity. Accepts a binary id, a keyword list of entity options
+  (`:id`, `:traits`, `:generation`, `:parent_id`, `:energy`, `:born_at`),
+  or nothing for a fully random mind.
+  """
+  def spawn_entity(id_or_opts \\ [])
+
+  def spawn_entity(opts) when is_list(opts) do
+    DynamicSupervisor.start_child(EvolvingMinds.EntitySupervisor, {EvolvingMinds.Entity, opts})
   end
 
-  def spawn_entity(id, opts \\ []) do
-    DynamicSupervisor.start_child(
-      EvolvingMinds.EntitySupervisor,
-      {EvolvingMinds.Entity, [id: id] ++ opts}
-    )
+  def spawn_entity(id) when is_binary(id), do: spawn_entity(id, [])
+
+  def spawn_entity(id, opts) when is_binary(id) and is_list(opts) do
+    spawn_entity([id: id] ++ opts)
+  end
+
+  @doc "Returns the registered id of a live entity pid."
+  def id_of(pid) do
+    EvolvingMinds.EntityRegistry |> Registry.keys(pid) |> List.first()
   end
 
   def get_all_entities() do

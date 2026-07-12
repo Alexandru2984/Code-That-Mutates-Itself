@@ -280,6 +280,9 @@ defmodule EvolvingMindsWeb.WorldLive do
                         <p class="text-white font-black text-base tracking-tight">
                           {String.slice(entity.id, 0, 8)}
                         </p>
+                        <span class="text-[8px] font-mono font-bold text-purple-400/80 uppercase tracking-widest">
+                          Gen {Map.get(entity, :generation, 1)}
+                        </span>
                       </div>
                     </div>
 

@@ -65,6 +65,8 @@ defmodule EvolvingMinds.Entity do
           curiosity: :rand.uniform()
         }
 
+    generation = Keyword.get(args, :generation, 1)
+
     source_code = MutationEngine.generate_behavior(traits)
     behavior_fn = MutationEngine.compile_behavior(traits)
 
@@ -73,11 +75,21 @@ defmodule EvolvingMinds.Entity do
       traits: traits,
       behavior_source: source_code,
       behavior_fn: behavior_fn,
-      energy: 100
+      # energy/born_at options exist for world restores after restarts
+      energy: Keyword.get(args, :energy, 100),
+      generation: generation,
+      parent_id: Keyword.get(args, :parent_id),
+      born_at: Keyword.get(args, :born_at, System.system_time(:second))
     }
 
     EvolvingMinds.StateStore.update_state(id, state)
-    :telemetry.execute([:evolving_minds, :entity, :spawn], %{count: 1}, %{id: id, traits: traits})
+
+    :telemetry.execute([:evolving_minds, :entity, :spawn], %{count: 1}, %{
+      id: id,
+      traits: traits,
+      generation: generation
+    })
+
     # Delay the first action slightly to allow the supervisor to settle
     Process.send_after(self(), :act, 2000 + :rand.uniform(3000))
     {:ok, state}
