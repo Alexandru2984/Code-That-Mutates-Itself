@@ -13,6 +13,7 @@ defmodule EvolvingMindsWeb.Application do
       EvolvingMindsWeb.Telemetry,
       {DNSCluster, query: Application.get_env(:evolving_minds, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: EvolvingMinds.PubSub},
+      EvolvingMindsWeb.WorldPublisher,
       # Start to serve requests, typically the last entry
       EvolvingMindsWeb.Endpoint
     ]

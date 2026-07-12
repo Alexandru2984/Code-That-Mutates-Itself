@@ -2,35 +2,25 @@ defmodule EvolvingMindsWeb.WorldLive do
   use EvolvingMindsWeb, :live_view
 
   alias EvolvingMinds.World
+  alias EvolvingMindsWeb.WorldPublisher
+
   @impl true
   def mount(_params, _session, socket) do
-    if connected?(socket), do: :timer.send_interval(2000, :tick)
-
-    entities = fetch_entities()
+    if connected?(socket), do: WorldPublisher.subscribe()
 
     socket =
       socket
       |> assign(:query, "")
       |> assign(:sort, "energy_desc")
-      |> assign(global_events: EvolvingMinds.GlobalEvents.get_recent_events())
-      |> assign(stats: EvolvingMinds.Stats.get_history())
-      |> assign(top_interactions: EvolvingMinds.Stats.get_top_interactions())
       |> assign(public_controls: Application.get_env(:evolving_minds, :public_controls, false))
-      |> assign_entities(entities)
+      |> apply_snapshot(WorldPublisher.snapshot())
 
     {:ok, socket, layout: {EvolvingMindsWeb.Layouts, :screen}}
   end
 
   @impl true
-  def handle_info(:tick, socket) do
-    entities = fetch_entities()
-
-    {:noreply,
-     socket
-     |> assign(global_events: EvolvingMinds.GlobalEvents.get_recent_events())
-     |> assign(stats: EvolvingMinds.Stats.get_history())
-     |> assign(top_interactions: EvolvingMinds.Stats.get_top_interactions())
-     |> assign_entities(entities)}
+  def handle_info({:world_update, snapshot}, socket) do
+    {:noreply, apply_snapshot(socket, snapshot)}
   end
 
   @impl true
@@ -39,7 +29,7 @@ defmodule EvolvingMindsWeb.WorldLive do
       World.inject_energy(id)
     end
 
-    {:noreply, assign_entities(socket, fetch_entities())}
+    {:noreply, apply_snapshot(socket, WorldPublisher.snapshot())}
   end
 
   @impl true
@@ -56,8 +46,13 @@ defmodule EvolvingMindsWeb.WorldLive do
     {:noreply, socket}
   end
 
-  defp fetch_entities do
-    EvolvingMinds.StateStore.get_all_states()
+  defp apply_snapshot(socket, snapshot) do
+    socket
+    |> assign(:global_events, snapshot.global_events)
+    |> assign(:stats, snapshot.stats)
+    |> assign(:top_interactions, snapshot.top_interactions)
+    |> assign(:memories, snapshot.memories)
+    |> assign_entities(snapshot.entities)
   end
 
   defp assign_entities(socket, entities) do
@@ -286,7 +281,7 @@ defmodule EvolvingMindsWeb.WorldLive do
                   <!-- Memory Stream -->
                   <div class="mt-auto">
                     <div class="space-y-1.5">
-                      <%= for {type, sender} <- Enum.take(EvolvingMinds.Memory.get_memories(entity.id), 2) do %>
+                      <%= for {type, sender} <- Map.get(@memories, entity.id, []) do %>
                         <div class="flex items-center justify-between bg-white/[0.02] p-2 rounded-lg border border-white/5 transition-colors">
                           <div class="flex items-center gap-2">
                             <div class={"w-1.5 h-1.5 rounded-full #{case type do
