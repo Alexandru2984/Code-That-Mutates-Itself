@@ -57,7 +57,7 @@ defmodule EvolvingMinds.EntityTest do
 
     assert Enum.any?(
              GlobalEvents.get_recent_events(50),
-             &(&1.type == :death and &1.entity_id == id)
+             &(&1.type == :death and &1.entity_id == id and &1.cause == :exhaustion)
            )
   end
 

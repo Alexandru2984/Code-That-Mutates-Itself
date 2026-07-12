@@ -20,11 +20,25 @@ defmodule EvolvingMinds.MutationEngineTest do
       end
     end
 
-    test "fixed responses are trait-independent" do
+    test "aggressive minds fight back, passive minds flee" do
+      hawk = MutationEngine.compile_behavior(%{aggression: 0.9, curiosity: 0.5})
+      dove = MutationEngine.compile_behavior(%{aggression: 0.1, curiosity: 0.5})
+
+      assert hawk.({:attack, "x"}) == {:attack, "x"}
+      assert dove.({:attack, "x"}) == {:flee, "x"}
+    end
+
+    test "curious minds reciprocate knowledge, incurious ones just greet" do
+      curious = MutationEngine.compile_behavior(%{aggression: 0.5, curiosity: 0.9})
+      incurious = MutationEngine.compile_behavior(%{aggression: 0.5, curiosity: 0.1})
+
+      assert curious.({:share_knowledge, "x"}) == {:share_knowledge, "x"}
+      assert incurious.({:share_knowledge, "x"}) == {:greet, "x"}
+    end
+
+    test "unknown interactions are ignored" do
       behavior = MutationEngine.compile_behavior(%{aggression: 0.5, curiosity: 0.5})
 
-      assert behavior.({:attack, "x"}) == {:flee, "x"}
-      assert behavior.({:share_knowledge, "x"}) == {:greet, "x"}
       assert behavior.(:garbage) == {:ignore, nil}
     end
   end

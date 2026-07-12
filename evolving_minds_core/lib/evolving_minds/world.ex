@@ -7,10 +7,10 @@ defmodule EvolvingMinds.World do
     DynamicSupervisor.start_child(EvolvingMinds.EntitySupervisor, EvolvingMinds.Entity)
   end
 
-  def spawn_entity(id) do
+  def spawn_entity(id, opts \\ []) do
     DynamicSupervisor.start_child(
       EvolvingMinds.EntitySupervisor,
-      {EvolvingMinds.Entity, [id: id]}
+      {EvolvingMinds.Entity, [id: id] ++ opts}
     )
   end
 
@@ -37,6 +37,20 @@ defmodule EvolvingMinds.World do
     case Registry.lookup(EvolvingMinds.EntityRegistry, target_id) do
       [{pid, _}] ->
         GenServer.cast(pid, :inject_energy)
+
+      [] ->
+        :ok
+    end
+  end
+
+  @doc """
+  Applies a raw energy transfer to an entity (interaction settlements).
+  Unlike messages, adjustments never trigger behavior responses.
+  """
+  def adjust_energy(target_id, delta) do
+    case Registry.lookup(EvolvingMinds.EntityRegistry, target_id) do
+      [{pid, _}] ->
+        GenServer.cast(pid, {:adjust_energy, delta})
 
       [] ->
         :ok

@@ -97,8 +97,9 @@ defmodule EvolvingMindsWeb.WorldLiveTest do
     {:ok, view, _html} = live(conn, "/")
 
     # Entities spawn at 100 energy and injection is capped there, so drain
-    # first (5 acts x -5) to make the +20 observable.
-    for _ <- 1..5, do: send(pid, :act)
+    # first to make the +20 observable. Draining goes through adjust_energy:
+    # acts now send messages with energy consequences to other entities.
+    World.adjust_energy(id, -25)
     assert eventually(fn -> energy_of(id) == 75 end)
 
     # test.exs sets public_controls: true
@@ -119,7 +120,9 @@ defmodule EvolvingMindsWeb.WorldLiveTest do
     {:ok, view, _html} = live(conn, "/")
 
     # Drain everyone to 75 so injections are observable below the cap.
-    for {_id, pid} <- entities, _ <- 1..5, do: send(pid, :act)
+    # Draining goes through adjust_energy: acts now send messages with
+    # energy consequences to other entities.
+    for {id, _pid} <- entities, do: World.adjust_energy(id, -25)
     assert eventually(fn -> Enum.all?(entities, fn {id, _} -> energy_of(id) == 75 end) end)
 
     results =

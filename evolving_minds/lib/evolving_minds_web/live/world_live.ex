@@ -441,6 +441,7 @@ defmodule EvolvingMindsWeb.WorldLive do
                     {if Map.has_key?(event, :parent_id),
                       do: "from parent " <> String.slice(event.parent_id, 0, 8),
                       else: ""}
+                    {if event[:cause], do: "· #{event.cause}", else: ""}
                   </p>
                 </div>
               <% end %>
