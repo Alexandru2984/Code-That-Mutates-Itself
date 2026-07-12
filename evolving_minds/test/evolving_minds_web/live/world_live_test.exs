@@ -197,6 +197,35 @@ defmodule EvolvingMindsWeb.WorldLiveTest do
     assert List.last(results) =~ "Rate limit reached"
   end
 
+  test "visitors can spawn minds, rate limited with a population cap", %{conn: conn} do
+    before_ids = MapSet.new(World.get_all_entities())
+
+    on_exit(fn ->
+      for id <- World.get_all_entities(), not MapSet.member?(before_ids, id) do
+        case Registry.lookup(EvolvingMinds.EntityRegistry, id) do
+          [{pid, _}] -> DynamicSupervisor.terminate_child(EvolvingMinds.EntitySupervisor, pid)
+          [] -> :ok
+        end
+      end
+    end)
+
+    {:ok, view, _html} = live(conn, "/")
+
+    html = render_click(view, "spawn_mind", %{})
+    assert html =~ "A new mind awakens"
+
+    html = render_click(view, "spawn_mind", %{})
+    assert html =~ "A new mind awakens"
+
+    assert eventually(fn ->
+             length(World.get_all_entities()) >= MapSet.size(before_ids) + 2
+           end)
+
+    # Third spawn inside the window hits the limit.
+    html = render_click(view, "spawn_mind", %{})
+    assert html =~ "needs a moment"
+  end
+
   defp energy_of(id) do
     case StateStore.get_state(id) do
       nil -> nil

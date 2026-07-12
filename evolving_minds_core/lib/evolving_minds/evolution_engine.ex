@@ -17,6 +17,8 @@ defmodule EvolvingMinds.EvolutionEngine do
 
   @max_population 50
 
+  def max_population, do: @max_population
+
   def start_link(_) do
     GenServer.start_link(__MODULE__, %{}, name: __MODULE__)
   end

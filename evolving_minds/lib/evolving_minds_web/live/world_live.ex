@@ -4,10 +4,13 @@ defmodule EvolvingMindsWeb.WorldLive do
   alias EvolvingMinds.World
   alias EvolvingMindsWeb.WorldPublisher
 
-  # Public energy injections are rate limited per connected client:
-  # at most @inject_limit within a sliding @inject_window_ms window.
+  # Public controls are rate limited per connected client with sliding
+  # windows: @inject_limit injections per @inject_window_ms, and
+  # @spawn_limit spawned minds per @spawn_window_ms.
   @inject_limit 5
   @inject_window_ms 10_000
+  @spawn_limit 2
+  @spawn_window_ms 60_000
 
   @impl true
   def mount(_params, _session, socket) do
@@ -19,6 +22,7 @@ defmodule EvolvingMindsWeb.WorldLive do
       |> assign(:sort, "energy_desc")
       |> assign(:prev_visible, [])
       |> assign(:inject_history, [])
+      |> assign(:spawn_history, [])
       |> assign(:selected_id, nil)
       |> assign(:selected, nil)
       |> assign(:show_about, false)
@@ -61,6 +65,44 @@ defmodule EvolvingMindsWeb.WorldLive do
            |> assign(:inject_history, recent)
            |> put_flash(:error, "Rate limit reached — let the minds breathe for a few seconds.")}
         end
+    end
+  end
+
+  @impl true
+  def handle_event("spawn_mind", _params, socket) do
+    now = System.monotonic_time(:millisecond)
+    recent = Enum.filter(socket.assigns.spawn_history, &(now - &1 < @spawn_window_ms))
+
+    cond do
+      not socket.assigns.public_controls ->
+        {:noreply, socket}
+
+      socket.assigns.total_population >= EvolvingMinds.EvolutionEngine.max_population() ->
+        {:noreply, put_flash(socket, :error, "The world is full — wait for natural selection.")}
+
+      length(recent) >= @spawn_limit ->
+        {:noreply,
+         socket
+         |> assign(:spawn_history, recent)
+         |> put_flash(:error, "The world needs a moment between new minds.")}
+
+      true ->
+        {:ok, pid} = World.spawn_entity()
+        id = World.id_of(pid)
+
+        EvolvingMinds.GlobalEvents.report_event(%{
+          type: :birth,
+          entity_id: id,
+          cause: :visitor
+        })
+
+        socket =
+          socket
+          |> assign(:spawn_history, [now | recent])
+          |> put_flash(:info, "A new mind awakens: #{String.slice(id, 0, 8)}")
+          |> apply_snapshot(WorldPublisher.snapshot())
+
+        {:noreply, socket}
     end
   end
 
@@ -321,6 +363,16 @@ defmodule EvolvingMindsWeb.WorldLive do
                 {epoch_label(@epoch)}
               </span>
             </div>
+            <%= if @public_controls do %>
+              <button
+                phx-click="spawn_mind"
+                class="ml-2 px-3 py-2 rounded-xl border border-emerald-500/30 bg-emerald-500/5 hover:bg-emerald-500/20 transition-all duration-300"
+              >
+                <span class="text-[9px] font-black text-emerald-400 uppercase tracking-widest">
+                  Spawn a Mind
+                </span>
+              </button>
+            <% end %>
             <button
               phx-click="toggle_about"
               class="ml-2 px-3 py-2 rounded-xl border border-white/10 bg-white/[0.02] hover:bg-white/10 transition-all duration-300"
