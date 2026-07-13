@@ -172,6 +172,7 @@ defmodule EvolvingMindsWeb.WorldLive do
         |> Map.delete(:behavior_fn)
         |> Map.put(:memories, EvolvingMinds.Memory.get_memories(id))
         |> Map.put(:age, System.system_time(:second) - state.born_at)
+        |> Map.put(:ancestors, id |> EvolvingMinds.Ancestry.lineage() |> Enum.drop(1))
     end
   end
 
@@ -414,6 +415,14 @@ defmodule EvolvingMindsWeb.WorldLive do
                 </span>
               </button>
             <% end %>
+            <.link
+              navigate={~p"/tree"}
+              class="ml-2 px-3 py-2 rounded-xl border border-white/10 bg-white/[0.02] hover:bg-white/10 transition-all duration-300"
+            >
+              <span class="text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                Dynasties
+              </span>
+            </.link>
             <button
               phx-click="toggle_about"
               class="ml-2 px-3 py-2 rounded-xl border border-white/10 bg-white/[0.02] hover:bg-white/10 transition-all duration-300"
@@ -1050,13 +1059,29 @@ defmodule EvolvingMindsWeb.WorldLive do
                 <span class="text-[8px] text-slate-500 uppercase font-black block mb-1">
                   Lineage
                 </span>
-                <span class="text-[11px] font-mono text-slate-300">
-                  <%= if @selected.parent_id do %>
-                    Child of {String.slice(@selected.parent_id, 0, 8)}
-                  <% else %>
+                <%= if @selected.ancestors == [] do %>
+                  <span class="text-[11px] font-mono text-slate-300">
                     First of its line — primordial spawn
-                  <% end %>
-                </span>
+                  </span>
+                <% else %>
+                  <div class="flex flex-wrap items-center gap-1.5 text-[11px] font-mono">
+                    <span class="text-slate-200 font-bold">{Map.get(@selected, :name, "?")}</span>
+                    <%= for ancestor <- @selected.ancestors do %>
+                      <span class="text-slate-600">←</span>
+                      <span class={
+                        if ancestor.died_at, do: "text-slate-500", else: "text-emerald-400"
+                      }>
+                        {ancestor.name || String.slice(ancestor.id, 0, 8)}
+                      </span>
+                    <% end %>
+                  </div>
+                <% end %>
+                <.link
+                  navigate={~p"/tree"}
+                  class="text-[9px] font-black text-cyan-500/70 uppercase tracking-widest hover:text-cyan-400 inline-block mt-2"
+                >
+                  View full genealogy →
+                </.link>
               </div>
 
               <div class="mb-6">

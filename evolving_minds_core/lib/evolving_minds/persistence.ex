@@ -80,7 +80,8 @@ defmodule EvolvingMinds.Persistence do
       epoch: Environment.current_epoch(),
       entities: entities,
       memories: :ets.tab2list(:entity_memories),
-      all_time: EvolvingMinds.AllTimeStats.export()
+      all_time: EvolvingMinds.AllTimeStats.export(),
+      ancestry: EvolvingMinds.Ancestry.export()
     }
 
     file = path()
@@ -110,6 +111,10 @@ defmodule EvolvingMinds.Persistence do
 
       if all_time = Map.get(snapshot, :all_time) do
         EvolvingMinds.AllTimeStats.import(all_time)
+      end
+
+      if ancestry = Map.get(snapshot, :ancestry) do
+        EvolvingMinds.Ancestry.import(ancestry)
       end
 
       Environment.set_epoch(snapshot.epoch)

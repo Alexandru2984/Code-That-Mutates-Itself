@@ -34,6 +34,7 @@ defmodule EvolvingMindsWeb.Router do
     pipe_through :browser
 
     live "/", WorldLive
+    live "/tree", TreeLive
   end
 
   scope "/", EvolvingMindsWeb do

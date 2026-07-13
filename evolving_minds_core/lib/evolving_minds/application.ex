@@ -13,6 +13,7 @@ defmodule EvolvingMinds.Application do
         EvolvingMinds.GlobalEvents,
         EvolvingMinds.Stats,
         EvolvingMinds.AllTimeStats,
+        EvolvingMinds.Ancestry,
         EvolvingMinds.Environment,
         {DynamicSupervisor, strategy: :one_for_one, name: EvolvingMinds.EntitySupervisor},
         # Persistence restores the world before the EvolutionEngine decides
