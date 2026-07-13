@@ -56,6 +56,16 @@ defmodule EvolvingMinds.TribeTest do
     assert {:ok, child_id, ^parent_id} = EvolutionEngine.reproduce([parent_state])
 
     assert StateStore.get_state(child_id).tribe == :umbra
+
+    # The child must not outlive the test: on slow machines a leaked
+    # entity starts acting and corrupts later tests' energy math.
+    case Registry.lookup(EvolvingMinds.EntityRegistry, child_id) do
+      [{child_pid, _}] ->
+        DynamicSupervisor.terminate_child(EvolvingMinds.EntitySupervisor, child_pid)
+
+      [] ->
+        :ok
+    end
   end
 
   defp eventually(fun, attempts \\ 50) do

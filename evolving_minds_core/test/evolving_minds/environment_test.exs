@@ -32,6 +32,10 @@ defmodule EvolvingMinds.EnvironmentTest do
   end
 
   test "acting during a famine drains more energy" do
+    # The exact-energy assertion needs an otherwise-empty world: any
+    # live foreign entity could answer a greeting with an energy bonus.
+    wipe_world()
+
     Environment.set_epoch(:famine)
 
     id = "FMNE-#{System.unique_integer([:positive])}"
@@ -46,6 +50,17 @@ defmodule EvolvingMinds.EnvironmentTest do
     send(pid, :act)
 
     assert eventually(fn -> StateStore.get_state(id).energy == 92 end)
+  end
+
+  defp wipe_world do
+    for id <- World.get_all_entities() do
+      case Registry.lookup(EvolvingMinds.EntityRegistry, id) do
+        [{pid, _}] -> DynamicSupervisor.terminate_child(EvolvingMinds.EntitySupervisor, pid)
+        [] -> :ok
+      end
+    end
+
+    assert eventually(fn -> World.get_all_entities() == [] end)
   end
 
   defp eventually(fun, attempts \\ 50) do
