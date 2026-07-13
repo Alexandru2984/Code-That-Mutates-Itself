@@ -67,6 +67,7 @@ defmodule EvolvingMinds.Entity do
     generation = Keyword.get(args, :generation, 1)
     name = Keyword.get(args, :name) || EvolvingMinds.Names.generate()
     parent_id = Keyword.get(args, :parent_id)
+    tribe = Keyword.get(args, :tribe) || Enum.random([:solari, :umbra])
 
     source_code = MutationEngine.generate_behavior(traits)
     behavior_fn = MutationEngine.compile_behavior(traits)
@@ -74,6 +75,7 @@ defmodule EvolvingMinds.Entity do
     state = %{
       id: id,
       name: name,
+      tribe: tribe,
       traits: traits,
       behavior_source: source_code,
       behavior_fn: behavior_fn,
@@ -90,6 +92,7 @@ defmodule EvolvingMinds.Entity do
     :telemetry.execute([:evolving_minds, :entity, :spawn], %{count: 1}, %{
       id: id,
       name: name,
+      tribe: tribe,
       traits: traits,
       generation: generation,
       parent_id: parent_id
@@ -160,7 +163,14 @@ defmodule EvolvingMinds.Entity do
         :ok
 
       target_id ->
-        type = if :rand.uniform() > state.traits.aggression, do: :greet, else: :attack
+        # Tribal loyalty: minds never attack their own tribe.
+        type =
+          cond do
+            same_tribe?(state, target_id) -> :greet
+            :rand.uniform() > state.traits.aggression -> :greet
+            true -> :attack
+          end
+
         World.send_message(target_id, type, state.id)
     end
 
@@ -221,6 +231,13 @@ defmodule EvolvingMinds.Entity do
 
   defp response_type({action, _}) when is_atom(action), do: action
   defp response_type(_), do: :ignore
+
+  defp same_tribe?(state, target_id) do
+    case EvolvingMinds.StateStore.get_state(target_id) do
+      %{tribe: tribe} -> tribe == state.tribe
+      _ -> false
+    end
+  end
 
   defp apply_energy(state, delta, death_cause, killer_id \\ nil) do
     new_state = %{state | energy: min(@max_energy, state.energy + delta)}

@@ -288,6 +288,19 @@ defmodule EvolvingMindsWeb.WorldLive do
   defp epoch_class(:famine), do: "text-rose-400"
   defp epoch_class(_), do: "text-slate-500"
 
+  defp tribe_class(:solari), do: "text-amber-400"
+  defp tribe_class(:umbra), do: "text-violet-400"
+  defp tribe_class(_), do: "text-slate-500"
+
+  defp tribe_counts(entities) do
+    solari = Enum.count(entities, &(Map.get(&1, :tribe) == :solari))
+    umbra = Enum.count(entities, &(Map.get(&1, :tribe) == :umbra))
+    {solari, umbra}
+  end
+
+  defp tribe_share(part, total) when total > 0, do: round(part / total * 100)
+  defp tribe_share(_part, _total), do: 50
+
   defp epoch_label(:abundance), do: "Epoch: Abundance"
   defp epoch_label(:famine), do: "Epoch: Famine"
   defp epoch_label(_), do: "Epoch: Normal"
@@ -405,6 +418,21 @@ defmodule EvolvingMindsWeb.WorldLive do
                 {epoch_label(@epoch)}
               </span>
             </div>
+            <div class="flex flex-col gap-1 border-l border-white/10 pl-4 min-w-[110px]">
+              <% {solari, umbra} = tribe_counts(@entities) %>
+              <div class="flex justify-between text-[8px] font-black uppercase tracking-widest">
+                <span class="text-amber-400">Solari {solari}</span>
+                <span class="text-violet-400">{umbra} Umbra</span>
+              </div>
+              <div class="h-1.5 w-full rounded-full overflow-hidden bg-black/40 flex">
+                <div
+                  class="h-full bg-amber-500 transition-all duration-1000"
+                  style={"width: #{tribe_share(solari, solari + umbra)}%"}
+                >
+                </div>
+                <div class="h-full bg-violet-500 flex-1 transition-all duration-1000"></div>
+              </div>
+            </div>
             <%= if @public_controls do %>
               <button
                 phx-click="spawn_mind"
@@ -469,8 +497,11 @@ defmodule EvolvingMindsWeb.WorldLive do
                         <span class="text-[8px] font-mono text-slate-600">
                           {String.slice(entity.id, 0, 8)}
                         </span>
-                        <span class="text-[8px] font-mono font-bold text-purple-400/80 uppercase tracking-widest block">
-                          Gen {Map.get(entity, :generation, 1)}
+                        <span class="text-[8px] font-mono font-bold uppercase tracking-widest block">
+                          <span class="text-purple-400/80">Gen {Map.get(entity, :generation, 1)}</span>
+                          <span class={tribe_class(Map.get(entity, :tribe))}>
+                            · {Map.get(entity, :tribe, :unaligned)}
+                          </span>
                         </span>
                       </div>
                     </div>
@@ -1012,7 +1043,14 @@ defmodule EvolvingMindsWeb.WorldLive do
                 <p class="text-white font-black text-xl tracking-tight">
                   {(@selected && Map.get(@selected, :name)) || String.slice(@selected_id, 0, 16)}
                 </p>
-                <p class="text-[9px] font-mono text-slate-600">{@selected_id}</p>
+                <p class="text-[9px] font-mono text-slate-600">
+                  {@selected_id}
+                  <%= if @selected && Map.get(@selected, :tribe) do %>
+                    <span class={"font-black uppercase #{tribe_class(@selected.tribe)}"}>
+                      · {@selected.tribe}
+                    </span>
+                  <% end %>
+                </p>
               </div>
               <button
                 phx-click="close_entity"

@@ -71,7 +71,17 @@ defmodule EvolvingMinds.Persistence do
     entities =
       StateStore.get_all_states()
       |> Enum.map(
-        &Map.take(&1, [:id, :name, :traits, :energy, :generation, :parent_id, :born_at, :kills])
+        &Map.take(&1, [
+          :id,
+          :name,
+          :tribe,
+          :traits,
+          :energy,
+          :generation,
+          :parent_id,
+          :born_at,
+          :kills
+        ])
       )
 
     snapshot = %{

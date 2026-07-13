@@ -91,6 +91,7 @@ defmodule EvolvingMinds.Ancestry do
     record = %{
       id: metadata.id,
       name: metadata[:name],
+      tribe: metadata[:tribe],
       parent_id: metadata[:parent_id],
       generation: Map.get(metadata, :generation, 1),
       born_at: System.system_time(:second),

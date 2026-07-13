@@ -44,13 +44,18 @@ defmodule EvolvingMindsWeb.TreeLive do
     |> assign(:alive, Enum.count(records, &is_nil(&1.died_at)))
   end
 
+  defp name_class(%{died_at: died}) when died != nil, do: "text-slate-500"
+  defp name_class(%{tribe: :solari}), do: "text-amber-400"
+  defp name_class(%{tribe: :umbra}), do: "text-violet-400"
+  defp name_class(_record), do: "text-white"
+
   defp dynasty(assigns) do
     ~H"""
     <div class={if @depth > 0, do: "ml-3 pl-3 border-l border-white/5", else: ""}>
       <div class="flex items-center gap-2 py-1">
         <div class={"w-1.5 h-1.5 rounded-full shrink-0 #{if @record.died_at, do: "bg-slate-700", else: "bg-emerald-500"}"}>
         </div>
-        <span class={"text-xs font-bold #{if @record.died_at, do: "text-slate-500", else: "text-white"}"}>
+        <span class={"text-xs font-bold #{name_class(@record)}"}>
           {@record.name || String.slice(@record.id, 0, 8)}
         </span>
         <span class="text-[8px] font-mono text-purple-400/70 uppercase">

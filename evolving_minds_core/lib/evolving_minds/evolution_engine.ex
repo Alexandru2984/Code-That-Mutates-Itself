@@ -87,7 +87,8 @@ defmodule EvolvingMinds.EvolutionEngine do
       World.spawn_entity(
         traits: MutationEngine.inherit(parent.traits),
         generation: child_generation,
-        parent_id: parent.id
+        parent_id: parent.id,
+        tribe: Map.get(parent, :tribe)
       )
 
     child_id = World.id_of(pid)

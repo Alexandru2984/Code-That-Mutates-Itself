@@ -222,6 +222,23 @@ defmodule EvolvingMindsWeb.WorldLiveTest do
     assert html =~ "Velna begat Novix (gen 12)"
   end
 
+  test "cards show tribe badges and the header shows the balance bar", %{conn: conn} do
+    id = "TRBU-#{System.unique_integer([:positive])}"
+    {:ok, pid} = World.spawn_entity(id, name: "Solarian", tribe: :solari)
+
+    on_exit(fn ->
+      if Process.alive?(pid) do
+        DynamicSupervisor.terminate_child(EvolvingMinds.EntitySupervisor, pid)
+      end
+    end)
+
+    {:ok, _view, html} = live(conn, "/")
+
+    assert html =~ "solari"
+    assert html =~ "Solari"
+    assert html =~ "Umbra"
+  end
+
   test "cards show the mind's name", %{conn: conn} do
     id = "CNAM-#{System.unique_integer([:positive])}"
     {:ok, pid} = World.spawn_entity(id, name: "Korvax")
