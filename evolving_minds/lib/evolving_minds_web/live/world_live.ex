@@ -325,6 +325,16 @@ defmodule EvolvingMindsWeb.WorldLive do
 
   defp population_points(_), do: nil
 
+  # Distribution of living minds across the 12 most recent generations,
+  # as {generation, count, percent-of-max} for bar heights.
+  defp generation_histogram(entities) do
+    counts = Enum.frequencies_by(entities, &Map.get(&1, :generation, 1))
+    shown = counts |> Map.keys() |> Enum.sort() |> Enum.take(-12)
+    max_count = shown |> Enum.map(&counts[&1]) |> Enum.max(fn -> 1 end)
+
+    Enum.map(shown, fn gen -> {gen, counts[gen], round(counts[gen] / max_count * 100)} end)
+  end
+
   # 10-bucket distribution of a trait across the living population,
   # as {count, percent-of-max} pairs for bar heights.
   defp histogram(entities, trait) do
@@ -835,6 +845,33 @@ defmodule EvolvingMindsWeb.WorldLive do
                     <span class="text-[7px] font-bold text-cyan-400/80 uppercase block mt-1.5">
                       Curiosity 0 → 1
                     </span>
+                  </div>
+                </div>
+              </div>
+              <!-- Generation distribution -->
+              <div>
+                <span class="text-[8px] uppercase tracking-widest text-slate-500 font-bold block mb-1.5">
+                  Generations Alive
+                </span>
+                <div class="bg-black/40 rounded-2xl border border-white/5 p-3">
+                  <div class="flex items-end gap-1 h-12">
+                    <%= for {gen, count, pct} <- generation_histogram(@entities) do %>
+                      <div class="flex-1 flex flex-col items-center gap-0.5" title={"#{count} minds"}>
+                        <div class="w-full flex items-end h-9">
+                          <div
+                            class="w-full bg-purple-500/70 rounded-t-sm"
+                            style={"height: #{max(pct, 6)}%"}
+                          >
+                          </div>
+                        </div>
+                        <span class="text-[7px] font-mono text-purple-400/70">{gen}</span>
+                      </div>
+                    <% end %>
+                    <%= if @entities == [] do %>
+                      <span class="text-[8px] font-bold text-slate-600 uppercase tracking-widest mx-auto self-center">
+                        Empty world
+                      </span>
+                    <% end %>
                   </div>
                 </div>
               </div>
