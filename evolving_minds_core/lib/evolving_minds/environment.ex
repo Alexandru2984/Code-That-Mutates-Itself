@@ -72,7 +72,7 @@ defmodule EvolvingMinds.Environment do
 
       EvolvingMinds.GlobalEvents.report_event(%{
         type: :epoch_change,
-        detail: "Epoch shifted: #{previous} -> #{epoch}"
+        detail: epoch_narrative(epoch)
       })
 
       :telemetry.execute([:evolving_minds, :epoch, :change], %{count: 1}, %{
@@ -83,6 +83,10 @@ defmodule EvolvingMinds.Environment do
       Logger.info("Epoch shifted: #{previous} -> #{epoch}")
     end
   end
+
+  defp epoch_narrative(:famine), do: "The world slipped into famine"
+  defp epoch_narrative(:abundance), do: "An age of abundance began"
+  defp epoch_narrative(:normal), do: "The world returned to balance"
 
   # Weighted toward stability: half the rolls keep the world normal.
   defp random_epoch do

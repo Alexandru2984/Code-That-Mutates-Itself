@@ -66,11 +66,23 @@ defmodule EvolvingMinds.World do
   @doc """
   Applies a raw energy transfer to an entity (interaction settlements).
   Unlike messages, adjustments never trigger behavior responses.
+  `source_id` attributes a fatal drain to its author.
   """
-  def adjust_energy(target_id, delta) do
+  def adjust_energy(target_id, delta, source_id \\ nil) do
     case Registry.lookup(EvolvingMinds.EntityRegistry, target_id) do
       [{pid, _}] ->
-        GenServer.cast(pid, {:adjust_energy, delta})
+        GenServer.cast(pid, {:adjust_energy, delta, source_id})
+
+      [] ->
+        :ok
+    end
+  end
+
+  @doc "Credits a kill to a living entity."
+  def credit_kill(killer_id) do
+    case Registry.lookup(EvolvingMinds.EntityRegistry, killer_id) do
+      [{pid, _}] ->
+        GenServer.cast(pid, :credit_kill)
 
       [] ->
         :ok

@@ -91,11 +91,14 @@ defmodule EvolvingMinds.EvolutionEngine do
       )
 
     child_id = World.id_of(pid)
+    child = StateStore.get_state(child_id)
 
     EvolvingMinds.GlobalEvents.report_event(%{
       type: :reproduction,
       entity_id: child_id,
+      name: child && child.name,
       parent_id: parent.id,
+      parent_name: parent[:name],
       generation: child_generation
     })
 

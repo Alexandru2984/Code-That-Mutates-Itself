@@ -89,17 +89,19 @@ defmodule EvolvingMindsWeb.WorldLive do
       true ->
         {:ok, pid} = World.spawn_entity()
         id = World.id_of(pid)
+        name = mind_name(id)
 
         EvolvingMinds.GlobalEvents.report_event(%{
           type: :birth,
           entity_id: id,
+          name: name,
           cause: :visitor
         })
 
         socket =
           socket
           |> assign(:spawn_history, [now | recent])
-          |> put_flash(:info, "A new mind awakens: #{String.slice(id, 0, 8)}")
+          |> put_flash(:info, "A new mind awakens: #{name}")
           |> apply_snapshot(WorldPublisher.snapshot())
 
         {:noreply, socket}
@@ -147,6 +149,13 @@ defmodule EvolvingMindsWeb.WorldLive do
     |> assign(:entities, entities)
     |> assign(:selected, build_selected(socket.assigns.selected_id))
     |> refresh_stream(entities, opts)
+  end
+
+  defp mind_name(id) do
+    case EvolvingMinds.StateStore.get_state(id) do
+      %{name: name} -> name
+      _ -> String.slice(id, 0, 8)
+    end
   end
 
   # The detail panel reads fresh state directly; a nil result for a
@@ -241,6 +250,38 @@ defmodule EvolvingMindsWeb.WorldLive do
     do: Enum.sort_by(entities, & &1.traits.curiosity, :desc)
 
   defp sort_entities(entities, _), do: Enum.sort_by(entities, & &1.energy, :desc)
+
+  # The event feed reads as a story; every branch degrades gracefully
+  # for events recorded before names existed.
+  defp event_sentence(%{type: :death} = event) do
+    victim = event[:name] || fallback_name(event)
+
+    cond do
+      event[:killer_name] -> "#{victim} was slain by #{event.killer_name}"
+      event[:killer_id] -> "#{victim} was slain by #{String.slice(event.killer_id, 0, 8)}"
+      true -> "#{victim} died of #{event[:cause] || :exhaustion}"
+    end
+  end
+
+  defp event_sentence(%{type: :mutation} = event) do
+    "The mind of #{event[:name] || fallback_name(event)} mutated"
+  end
+
+  defp event_sentence(%{type: :reproduction} = event) do
+    child = event[:name] || fallback_name(event)
+    parent = event[:parent_name] || (event[:parent_id] && String.slice(event.parent_id, 0, 8))
+    "#{parent || "A mind"} begat #{child} (gen #{event[:generation] || "?"})"
+  end
+
+  defp event_sentence(%{type: :birth, cause: :visitor} = event) do
+    "A visitor summoned #{event[:name] || fallback_name(event)}"
+  end
+
+  defp event_sentence(%{type: :birth} = event), do: event[:detail] || "New minds emerged"
+  defp event_sentence(event), do: event[:detail] || "The world stirred"
+
+  defp fallback_name(%{entity_id: id}) when is_binary(id), do: String.slice(id, 0, 8)
+  defp fallback_name(_event), do: "A mind"
 
   defp epoch_class(:abundance), do: "text-emerald-400"
   defp epoch_class(:famine), do: "text-rose-400"
@@ -413,13 +454,13 @@ defmodule EvolvingMindsWeb.WorldLive do
                         </svg>
                       </div>
                       <div>
-                        <h2 class="text-[8px] font-bold text-slate-500 uppercase tracking-widest mb-0.5">
-                          ID
-                        </h2>
                         <p class="text-white font-black text-base tracking-tight">
-                          {String.slice(entity.id, 0, 8)}
+                          {Map.get(entity, :name, "Unnamed")}
                         </p>
-                        <span class="text-[8px] font-mono font-bold text-purple-400/80 uppercase tracking-widest">
+                        <span class="text-[8px] font-mono text-slate-600">
+                          {String.slice(entity.id, 0, 8)}
+                        </span>
+                        <span class="text-[8px] font-mono font-bold text-purple-400/80 uppercase tracking-widest block">
                           Gen {Map.get(entity, :generation, 1)}
                         </span>
                       </div>
@@ -589,13 +630,7 @@ defmodule EvolvingMindsWeb.WorldLive do
                     </span>
                   </div>
                   <p class="text-[10px] text-slate-400 font-medium">
-                    {if Map.has_key?(event, :entity_id),
-                      do: "Entity " <> String.slice(event.entity_id, 0, 8),
-                      else: event[:detail] || "System action"}
-                    {if Map.has_key?(event, :parent_id),
-                      do: "from parent " <> String.slice(event.parent_id, 0, 8),
-                      else: ""}
-                    {if event[:cause], do: "· #{event.cause}", else: ""}
+                    {event_sentence(event)}
                   </p>
                 </div>
               <% end %>
@@ -839,21 +874,55 @@ defmodule EvolvingMindsWeb.WorldLive do
                 </span>
               </div>
             </div>
-            <%= if @all_time.oldest do %>
-              <div class="bg-black/40 p-3 rounded-2xl border border-white/5 flex items-center justify-between">
-                <div>
-                  <span class="text-[8px] text-slate-500 uppercase font-black block mb-0.5">
-                    Oldest Mind Ever
-                  </span>
-                  <span class="text-[10px] font-mono font-bold text-amber-400">
-                    {String.slice(@all_time.oldest.id || "?", 0, 8)}
+            <div class="space-y-2">
+              <%= if @all_time.oldest do %>
+                <div class="bg-black/40 p-3 rounded-2xl border border-white/5 flex items-center justify-between">
+                  <div>
+                    <span class="text-[8px] text-slate-500 uppercase font-black block mb-0.5">
+                      Oldest Mind Ever
+                    </span>
+                    <span class="text-[10px] font-bold text-amber-400">
+                      {@all_time.oldest[:name] || String.slice(@all_time.oldest.id || "?", 0, 8)}
+                    </span>
+                  </div>
+                  <span class="text-sm font-black text-amber-400 tabular-nums">
+                    {format_age(@all_time.oldest.age)}
                   </span>
                 </div>
-                <span class="text-sm font-black text-amber-400 tabular-nums">
-                  {format_age(@all_time.oldest.age)}
-                </span>
-              </div>
-            <% end %>
+              <% end %>
+              <%= if @all_time[:most_feared] do %>
+                <div class="bg-black/40 p-3 rounded-2xl border border-white/5 flex items-center justify-between">
+                  <div>
+                    <span class="text-[8px] text-slate-500 uppercase font-black block mb-0.5">
+                      Most Feared
+                    </span>
+                    <span class="text-[10px] font-bold text-rose-400">
+                      {@all_time.most_feared[:name] ||
+                        String.slice(@all_time.most_feared.id || "?", 0, 8)}
+                    </span>
+                  </div>
+                  <span class="text-sm font-black text-rose-400 tabular-nums">
+                    {@all_time.most_feared.kills} kills
+                  </span>
+                </div>
+              <% end %>
+              <%= if @all_time[:most_prolific] do %>
+                <div class="bg-black/40 p-3 rounded-2xl border border-white/5 flex items-center justify-between">
+                  <div>
+                    <span class="text-[8px] text-slate-500 uppercase font-black block mb-0.5">
+                      Most Prolific
+                    </span>
+                    <span class="text-[10px] font-bold text-emerald-400">
+                      {@all_time.most_prolific[:name] ||
+                        String.slice(@all_time.most_prolific.id || "?", 0, 8)}
+                    </span>
+                  </div>
+                  <span class="text-sm font-black text-emerald-400 tabular-nums">
+                    {@all_time.most_prolific.children} heirs
+                  </span>
+                </div>
+              <% end %>
+            </div>
           </div>
         </aside>
       </main>
@@ -931,9 +1000,10 @@ defmodule EvolvingMindsWeb.WorldLive do
                 <h2 class="text-[9px] font-bold text-slate-500 uppercase tracking-[0.3em] mb-1">
                   Mind Dossier
                 </h2>
-                <p class="text-white font-black text-xl tracking-tight font-mono">
-                  {String.slice(@selected_id, 0, 16)}
+                <p class="text-white font-black text-xl tracking-tight">
+                  {(@selected && Map.get(@selected, :name)) || String.slice(@selected_id, 0, 16)}
                 </p>
+                <p class="text-[9px] font-mono text-slate-600">{@selected_id}</p>
               </div>
               <button
                 phx-click="close_entity"
@@ -945,7 +1015,7 @@ defmodule EvolvingMindsWeb.WorldLive do
             </div>
 
             <%= if @selected do %>
-              <div class="grid grid-cols-3 gap-3 mb-6">
+              <div class="grid grid-cols-2 gap-3 mb-6">
                 <div class="bg-black/40 p-3 rounded-2xl border border-white/5">
                   <span class="text-[8px] text-slate-500 uppercase font-black block mb-1">Gen</span>
                   <span class="text-lg font-black text-purple-400 tabular-nums">
@@ -964,6 +1034,14 @@ defmodule EvolvingMindsWeb.WorldLive do
                   </span>
                   <span class="text-lg font-black text-cyan-400 tabular-nums">
                     {@selected.energy}%
+                  </span>
+                </div>
+                <div class="bg-black/40 p-3 rounded-2xl border border-white/5">
+                  <span class="text-[8px] text-slate-500 uppercase font-black block mb-1">
+                    Kills
+                  </span>
+                  <span class="text-lg font-black text-rose-400 tabular-nums">
+                    {Map.get(@selected, :kills, 0)}
                   </span>
                 </div>
               </div>

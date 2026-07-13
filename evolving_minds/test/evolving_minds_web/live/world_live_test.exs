@@ -197,6 +197,46 @@ defmodule EvolvingMindsWeb.WorldLiveTest do
     assert List.last(results) =~ "Rate limit reached"
   end
 
+  test "the event feed tells the story with names", %{conn: conn} do
+    EvolvingMinds.GlobalEvents.report_event(%{
+      type: :death,
+      entity_id: "STORY-VICTIM",
+      name: "Testor",
+      cause: :killed,
+      killer_id: "STORY-KILLER",
+      killer_name: "Slayer"
+    })
+
+    EvolvingMinds.GlobalEvents.report_event(%{
+      type: :reproduction,
+      entity_id: "STORY-CHILD",
+      name: "Novix",
+      parent_id: "STORY-PARENT",
+      parent_name: "Velna",
+      generation: 12
+    })
+
+    {:ok, _view, html} = live(conn, "/")
+
+    assert html =~ "Testor was slain by Slayer"
+    assert html =~ "Velna begat Novix (gen 12)"
+  end
+
+  test "cards show the mind's name", %{conn: conn} do
+    id = "CNAM-#{System.unique_integer([:positive])}"
+    {:ok, pid} = World.spawn_entity(id, name: "Korvax")
+
+    on_exit(fn ->
+      if Process.alive?(pid) do
+        DynamicSupervisor.terminate_child(EvolvingMinds.EntitySupervisor, pid)
+      end
+    end)
+
+    {:ok, _view, html} = live(conn, "/")
+    assert html =~ "Korvax"
+    assert html =~ String.slice(id, 0, 8)
+  end
+
   test "visitors can spawn minds, rate limited with a population cap", %{conn: conn} do
     before_ids = MapSet.new(World.get_all_entities())
 

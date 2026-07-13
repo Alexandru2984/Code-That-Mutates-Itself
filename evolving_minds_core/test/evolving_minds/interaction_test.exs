@@ -56,17 +56,39 @@ defmodule EvolvingMinds.InteractionTest do
     assert eventually(fn -> energy_of(sender) == 81 end)
   end
 
-  test "a mind can be killed by an attack" do
+  test "a mind can be killed by an attack, and the killer gets the credit" do
     victim = spawn_at("KILL", @dove, 5)
+    killer = spawn_at("SLYR", @hawk, 75)
+    killer_name = StateStore.get_state(killer).name
 
-    World.send_message(victim, :attack, "GHOST-ATTACKER")
+    World.send_message(victim, :attack, killer)
 
     assert eventually(fn -> StateStore.get_state(victim) == nil end)
 
     assert Enum.any?(
              GlobalEvents.get_recent_events(50),
-             &(&1.type == :death and &1.entity_id == victim and &1.cause == :killed)
+             &(&1.type == :death and &1.entity_id == victim and &1.cause == :killed and
+                 &1.killer_id == killer and &1.killer_name == killer_name)
            )
+
+    # The killer's kill counter increments (credit_kill is a cast).
+    assert eventually(fn -> StateStore.get_state(killer).kills == 1 end)
+  end
+
+  test "entities carry generated names" do
+    id = spawn_at("NAME", @dove, 50)
+    state = StateStore.get_state(id)
+
+    assert is_binary(state.name)
+    assert String.length(state.name) >= 3
+
+    {:ok, pid} =
+      World.spawn_entity("NAMED-#{System.unique_integer([:positive])}", name: "Zebulon")
+
+    on_exit(fn -> DynamicSupervisor.terminate_child(EvolvingMinds.EntitySupervisor, pid) end)
+
+    named_id = EvolvingMinds.World.id_of(pid)
+    assert StateStore.get_state(named_id).name == "Zebulon"
   end
 
   test "a fatal energy adjustment kills too" do

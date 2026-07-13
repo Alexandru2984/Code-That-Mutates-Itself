@@ -65,28 +65,34 @@ defmodule EvolvingMinds.Entity do
         }
 
     generation = Keyword.get(args, :generation, 1)
+    name = Keyword.get(args, :name) || EvolvingMinds.Names.generate()
+    parent_id = Keyword.get(args, :parent_id)
 
     source_code = MutationEngine.generate_behavior(traits)
     behavior_fn = MutationEngine.compile_behavior(traits)
 
     state = %{
       id: id,
+      name: name,
       traits: traits,
       behavior_source: source_code,
       behavior_fn: behavior_fn,
-      # energy/born_at options exist for world restores after restarts
+      # energy/born_at/kills options exist for world restores after restarts
       energy: Keyword.get(args, :energy, 100),
       generation: generation,
-      parent_id: Keyword.get(args, :parent_id),
-      born_at: Keyword.get(args, :born_at, System.system_time(:second))
+      parent_id: parent_id,
+      born_at: Keyword.get(args, :born_at, System.system_time(:second)),
+      kills: Keyword.get(args, :kills, 0)
     }
 
     EvolvingMinds.StateStore.update_state(id, state)
 
     :telemetry.execute([:evolving_minds, :entity, :spawn], %{count: 1}, %{
       id: id,
+      name: name,
       traits: traits,
-      generation: generation
+      generation: generation,
+      parent_id: parent_id
     })
 
     # Delay the first action slightly to allow the supervisor to settle
@@ -118,17 +124,24 @@ defmodule EvolvingMinds.Entity do
       response: response_type(response)
     })
 
-    if sender_delta != 0, do: World.adjust_energy(sender_id, sender_delta)
+    if sender_delta != 0, do: World.adjust_energy(sender_id, sender_delta, state.id)
 
-    apply_energy(state, self_delta, :killed)
+    # A fatal incoming interaction credits the original sender.
+    apply_energy(state, self_delta, :killed, sender_id)
   end
 
-  def handle_cast({:adjust_energy, delta}, state) do
-    apply_energy(state, delta, :killed)
+  def handle_cast({:adjust_energy, delta, source_id}, state) do
+    apply_energy(state, delta, :killed, source_id)
   end
 
   def handle_cast(:inject_energy, state) do
     apply_energy(state, 20, :killed)
+  end
+
+  def handle_cast(:credit_kill, state) do
+    new_state = %{state | kills: state.kills + 1}
+    EvolvingMinds.StateStore.update_state(new_state.id, new_state)
+    {:noreply, new_state}
   end
 
   def handle_info(:act, state) do
@@ -156,10 +169,15 @@ defmodule EvolvingMinds.Entity do
         {new_traits, new_source, new_fn} =
           MutationEngine.mutate(state.traits, state.behavior_source, state.behavior_fn)
 
-        EvolvingMinds.GlobalEvents.report_event(%{type: :mutation, entity_id: state.id})
+        EvolvingMinds.GlobalEvents.report_event(%{
+          type: :mutation,
+          entity_id: state.id,
+          name: state.name
+        })
 
         :telemetry.execute([:evolving_minds, :entity, :mutation], %{count: 1}, %{
           id: state.id,
+          name: state.name,
           traits: new_traits
         })
 
@@ -204,28 +222,46 @@ defmodule EvolvingMinds.Entity do
   defp response_type({action, _}) when is_atom(action), do: action
   defp response_type(_), do: :ignore
 
-  defp apply_energy(state, delta, death_cause) do
+  defp apply_energy(state, delta, death_cause, killer_id \\ nil) do
     new_state = %{state | energy: min(@max_energy, state.energy + delta)}
 
     if new_state.energy <= 0 do
-      die(new_state, death_cause)
+      die(new_state, death_cause, killer_id)
     else
       EvolvingMinds.StateStore.update_state(new_state.id, new_state)
       {:noreply, new_state}
     end
   end
 
-  defp die(state, cause) do
-    EvolvingMinds.GlobalEvents.report_event(%{type: :death, entity_id: state.id, cause: cause})
+  defp die(state, cause, killer_id) do
+    killer_name =
+      case killer_id && EvolvingMinds.StateStore.get_state(killer_id) do
+        %{name: name} -> name
+        _ -> nil
+      end
+
+    if killer_id, do: World.credit_kill(killer_id)
+
+    EvolvingMinds.GlobalEvents.report_event(%{
+      type: :death,
+      entity_id: state.id,
+      name: state.name,
+      cause: cause,
+      killer_id: killer_id,
+      killer_name: killer_name
+    })
 
     :telemetry.execute([:evolving_minds, :entity, :death], %{count: 1}, %{
       id: state.id,
+      name: state.name,
       cause: cause,
       generation: state.generation,
-      age: System.system_time(:second) - state.born_at
+      age: System.system_time(:second) - state.born_at,
+      killer_id: killer_id,
+      killer_name: killer_name
     })
 
-    Logger.info("Entity #{state.id} died (#{cause}).")
+    Logger.info("Entity #{state.id} (#{state.name}) died (#{cause}).")
     # State and memory cleanup happens in StateStore, which monitors this
     # process and purges on :DOWN — the same path crashes take.
     {:stop, :normal, state}
