@@ -83,7 +83,26 @@ The app ships as a **mix release** managed by systemd behind Nginx (WebSocket pr
 ./deploy/deploy.sh   # deps + prod compile + assets + release + unit sync + restart + health check
 ```
 
-Runtime configuration is environment-driven (`config/runtime.exs`), loaded by systemd from `.env.prod` (not committed):
+### Backups
+
+The world snapshot is backed up to Google Drive via rclone every 6 hours (cron), with a rolling `world-latest.snapshot` plus timestamped copies kept for 30 days:
+
+```bash
+./deploy/backup-world.sh   # checks freshness, uploads, prunes old copies
+```
+
+The script fails loudly if the snapshot is missing or older than 10 minutes — a stale snapshot means persistence stopped saving. To restore a world:
+
+```bash
+sudo systemctl stop evolving-minds
+rclone copyto gdrive:Backup_VPS_ovhcloud/evolving-minds/world-latest.snapshot \
+  /home/micu/testing_elixir/evolving_minds/data/world.snapshot
+sudo systemctl start evolving-minds   # boot log: "World restored: N minds"
+```
+
+### Runtime configuration
+
+Environment-driven (`config/runtime.exs`), loaded by systemd from `.env.prod` (not committed):
 
 | Variable | Purpose |
 | --- | --- |
@@ -97,6 +116,57 @@ Runtime configuration is environment-driven (`config/runtime.exs`), loaded by sy
 | `ADMIN_USER` / `ADMIN_PASS` | Enable `/admin/world` + `/admin/dashboard` (404 when unset) |
 | `DNS_CLUSTER_QUERY` | Optional DNS-based clustering |
 
+
+## 📦 The Data
+
+Everything the world knows lives in one versioned snapshot (`data/world.snapshot`, Erlang External Term Format, written atomically). Real excerpts from the running world:
+
+```elixir
+%{
+  version: 1,
+  saved_at: ~U[2026-07-13 14:14:01Z],
+  epoch: :famine,
+  entities: [
+    %{
+      id: "EF7CA0491778174E",
+      name: "Faeluvax",
+      tribe: :solari,
+      generation: 2,
+      parent_id: "1745A426CBE9D561",
+      traits: %{aggression: 0.488, curiosity: 0.243},
+      energy: 27,
+      kills: 0,
+      born_at: 1783951971
+    },
+    # ...one per living mind (behavior closures are never serialized —
+    # they rebuild from traits on restore)
+  ],
+  memories: [{"EF7CA049...", [greet: "1745A426...", attack: "140769..."]}, ...],
+  ancestry: [
+    # every mind that ever lived, pruned oldest-dead-first past 2000
+    %{
+      id: "FD2C01E2CF73612A",
+      name: "Jorra",
+      tribe: :solari,
+      generation: 1,
+      parent_id: nil,
+      born_at: 1783951541,
+      died_at: 1783951594,
+      cause: :killed,
+      killer_id: "140769461943CBD1"   # Oskien did it
+    },
+    # ...
+  ],
+  all_time: %{
+    births: 4166,
+    deaths: 4159,
+    deaths_by_cause: %{killed: 2259, exhaustion: 1900},
+    max_generation: 19,
+    most_feared: %{id: "140769461943CBD1", name: "Oskien", kills: 3},
+    # ...mutations, interactions, oldest, most_prolific
+  }
+}
+```
 
 ## 🧪 Experiments
 
