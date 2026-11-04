@@ -37,6 +37,25 @@ defmodule EvolvingMindsWeb.LabLive do
           <div class="lab-scenarios" role="group" aria-label="Experiment presets">
             <button data-scenario="balanced"><strong>01 · A delicate balance</strong><span>Mixed personalities, normal resources.</span></button><button data-scenario="cooperation"><strong>02 · Better together</strong><span>Curious minds in a generous world.</span></button><button data-scenario="conflict"><strong>03 · Clash of strategies</strong><span>High aggression. Who survives?</span></button><button data-scenario="survival"><strong>04 · The long famine</strong><span>Scarce resources, rapid mutation.</span></button>
           </div>
+          <details class="lab-missions panel" data-missions>
+            <summary>Field missions <span>Three guided experiments · local milestones</span></summary>
+            <p class="muted">
+              Start a mission to build a fresh world. Follow its targets, then change the conditions to discover another strategy. Milestones stay in this browser; they are not a competitive leaderboard.
+            </p>
+            <div data-mission-list class="mission-list"></div>
+            <section data-active-mission hidden class="active-mission" aria-labelledby="mission-title">
+              <div class="section-heading">
+                <h2 id="mission-title" data-mission-title></h2><button
+                  type="button"
+                  data-mission-stop
+                  class="text-button"
+                >Close mission</button>
+              </div>
+              <div data-mission-targets class="mission-targets"></div>
+              <p data-mission-hint class="muted"></p><p data-mission-result class="mission-result">
+              </p>
+            </section>
+          </details>
           <div class="lab-library">
             <div>
               <label class="lab-save-label" for="lab-save-name">Experiment name<input
@@ -54,7 +73,18 @@ defmodule EvolvingMindsWeb.LabLive do
                 accept="application/json,.json"
                 aria-label="Import experiment JSON snapshot"
               /></label>
-              <a href="#library-heading" class="button button-quiet">View library ↓</a>
+              <a href="#library-heading" class="button button-quiet">View library ↓</a><button
+                type="button"
+                data-share-conditions
+                class="button button-quiet"
+              >Share starting conditions ↗</button>
+            </div><div data-share-result hidden class="lab-share-result">
+              <label for="lab-share-link">Reproducible starting conditions link</label><input
+                id="lab-share-link"
+                data-share-link
+                type="url"
+                readonly
+              /><small>This link starts a new world at step zero. Export JSON to share the current snapshot.</small>
             </div><p data-lab-notice class="muted" role="status">
               Save a world here, or import an exported experiment to continue its story.
             </p>

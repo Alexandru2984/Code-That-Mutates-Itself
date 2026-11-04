@@ -66,10 +66,15 @@ grafice de populație și export CSV. Salvările vechi sunt recuperate fără a 
 suprascrie; ștergerea are Undo. Datele corupte și biblioteca plină nu provoacă
 ștergeri automate. Numele sunt afișate ca text, iar CSV-ul neutralizează formulele.
 
+Trei misiuni ghidate urmăresc cooperarea, supraviețuirea în foamete și diversitatea.
+Obiectivele trebuie îndeplinite simultan, iar realizările sunt locale, fără clasament
+competitiv. Linkurile de partajare reproduc seedul și condițiile inițiale la pasul
+zero; exportul JSON păstrează în continuare starea curentă a experimentului.
+
 ## Extensii ulterioare, fără a le prezenta ca livrate
 
 - Replays și serii istorice persistente, cu retenție și buget de stocare.
-- Mai multe modele/scenarii educaționale și misiuni ghidate în laborator.
+- Mai multe modele educaționale și scenarii dinamice între epoci.
 - Misiuni de observație și realizări locale, fără a altera lumea comună.
 - Povești despre dinastii, migrații și evoluția strategiilor între epoci.
 - Partajare de dosare cu imagini sociale generate din datele publice.

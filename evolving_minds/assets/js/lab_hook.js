@@ -1,3 +1,4 @@
+import {mountFieldwork} from './lab_fieldwork_ui'
 import {mountLibrary} from './lab_library_ui'
 import {createWorld,stepWorld,summarize,restoreWorld,SCENARIOS} from './lab_engine.mjs'
 
@@ -43,11 +44,12 @@ export const EvolutionLab = {
     this.canvas.addEventListener('click',this.onCanvas);
     this.resize=new ResizeObserver(()=>this.render());this.resize.observe(this.canvas.parentElement);
     this.animate=time=>{if(this.destroyedFlag)return;const delta=Math.min(time-this.last,250);this.last=time;if(this.running&&!document.hidden){this.elapsed+=delta;let changed=false;while(this.elapsed>=1000/this.speed){this.elapsed-=1000/this.speed;stepWorld(this.world);changed=true}if(changed)this.render()}else this.elapsed=0;this.frame=requestAnimationFrame(this.animate)};
-    this.library=mountLibrary(this);
+    this.library=mountLibrary(this);this.fieldwork=mountFieldwork(this);
     this.frame=requestAnimationFrame(this.animate);this.render();
   },
   render() {
     if(!this.world.entities.length)this.running=false;
+    this.fieldwork?.update();
     const stats=summarize(this.world);
     for(const el of this.el.querySelectorAll('[data-stat]'))el.textContent=stats[el.dataset.stat]??this.world[el.dataset.stat]??0;
     const play=this.el.querySelector('[data-action=play]');play.disabled=this.world.entities.length===0;this.el.querySelector('[data-action=step]').disabled=this.world.entities.length===0;play.textContent=this.running?'Ⅱ Pause experiment':'▶ Run experiment';play.setAttribute('aria-pressed',String(this.running));
@@ -68,6 +70,6 @@ export const EvolutionLab = {
     this.el.querySelector('[data-extinct]').hidden=this.world.entities.length>0;
   },
   destroyed() {
-    this.destroyedFlag=true;this.library.destroy();cancelAnimationFrame(this.frame);this.resize.disconnect();this.el.removeEventListener('click',this.onClick);this.el.removeEventListener('input',this.onInput);this.form.removeEventListener('submit',this.onSubmit);this.canvas.removeEventListener('click',this.onCanvas);this.inspect.removeEventListener('change',this.onInspect);this.fileInput.removeEventListener('change',this.onFile);
+    this.destroyedFlag=true;this.library.destroy();this.fieldwork.destroy();cancelAnimationFrame(this.frame);this.resize.disconnect();this.el.removeEventListener('click',this.onClick);this.el.removeEventListener('input',this.onInput);this.form.removeEventListener('submit',this.onSubmit);this.canvas.removeEventListener('click',this.onCanvas);this.inspect.removeEventListener('change',this.onInspect);this.fileInput.removeEventListener('change',this.onFile);
   }
 }

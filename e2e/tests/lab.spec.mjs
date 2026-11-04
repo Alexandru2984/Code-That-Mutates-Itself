@@ -21,7 +21,7 @@ test('seeded experiments export reproducibly, save, reload and resume safely',as
   expect(errors).toEqual([]);
 });
 
-test('named library compares snapshots, safely exports CSV and supports rename and undo',async({page})=>{
+test('named library compares snapshots, safely exports CSV and supports rename and undo',async({page},testInfo)=>{
   await page.goto('/lab');await expect(page.locator('fieldset')).toBeEnabled();
   await expect(page.locator('[data-library-undo]')).not.toBeVisible();
   await page.locator('[data-save-name]').fill('<img src=x onerror=alert(1)>');await page.locator('[data-action=save]').click();
@@ -37,5 +37,26 @@ test('named library compares snapshots, safely exports CSV and supports rename a
   await page.locator('.saved-experiment').first().getByRole('button',{name:'Remove',exact:true}).click();await expect(page.locator('.saved-experiment')).toHaveCount(1);
   await page.locator('[data-library-undo]').click();await expect(page.locator('.saved-experiment')).toHaveCount(2);
   await page.reload();await expect(page.locator('.saved-experiment')).toHaveCount(2);
+  await page.locator('.saved-experiment').nth(0).locator('[data-entry-action=compare]').click();await page.locator('.saved-experiment').nth(1).locator('[data-entry-action=compare]').click();
+  await page.locator('.lab-saved').screenshot({path:testInfo.outputPath('library-desktop.png')});
   await page.setViewportSize({width:360,height:900});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  await page.locator('.lab-saved').screenshot({path:testInfo.outputPath('library-mobile.png')});
+});
+
+test('guided missions track real progress and shared links reproduce starting conditions',async({page,context})=>{
+  const errors=[];page.on('pageerror',error=>errors.push(error.message));
+  await page.goto('/lab');await expect(page.locator('fieldset')).toBeEnabled();
+  await page.locator('[data-missions] summary').click();await expect(page.locator('.mission-card')).toHaveCount(3);
+  await page.locator('[data-mission-start="common-ground"]').click();await expect(page.locator('[data-mission-title]')).toHaveText('Build common ground');
+  await expect(page.locator('[data-mission-result]')).toHaveText('Mission in progress');
+  for(let i=0;i<60;i++)await page.locator('[data-action=step]').click();
+  await expect(page.locator('[data-mission-result]')).toContainText('All targets met');
+  await page.locator('[data-share-conditions]').click();await expect(page.locator('[data-share-result]')).toBeVisible();
+  const url=await page.locator('[data-share-link]').inputValue();expect(url).toContain('mission=common-ground');
+  const second=await context.newPage();await second.goto(url);await expect(second.locator('fieldset')).toBeEnabled();
+  await expect(second.locator('[data-stat=tick]')).toHaveText('0');await expect(second.locator('input[name=seed]')).toHaveValue('common-ground-v1');
+  await expect(second.locator('[data-mission-badge=common-ground]')).toContainText('Completed locally');
+  await second.locator('[data-mission-stop]').click();await expect(second.locator('[data-active-mission]')).not.toBeVisible();
+  await second.setViewportSize({width:360,height:900});expect(await second.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  await second.close();expect(errors).toEqual([]);
 });
