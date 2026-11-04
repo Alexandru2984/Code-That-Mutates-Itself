@@ -44,7 +44,7 @@ defmodule EvolvingMinds.MixProject do
     [
       {:evolving_minds_core, path: "../evolving_minds_core"},
       {:phoenix, "~> 1.7.14"},
-      {:phoenix_html, "~> 3.3"},
+      {:phoenix_html, "~> 4.4"},
       {:phoenix_live_reload, "~> 1.2", only: :dev},
       {:phoenix_live_view, "~> 1.0"},
       {:floki, ">= 0.30.0", only: :test},
