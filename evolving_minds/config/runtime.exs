@@ -16,7 +16,7 @@ import Config
 #
 # Alternatively, you can use `mix phx.gen.release` to generate a `bin/server`
 # script that automatically sets the env var above.
-if System.get_env("PHX_SERVER") do
+if System.get_env("PHX_SERVER") in ["1", "true", "TRUE"] do
   config :evolving_minds, EvolvingMindsWeb.Endpoint, server: true
 end
 
@@ -33,7 +33,7 @@ if config_env() == :prod do
       You can generate one by calling: mix phx.gen.secret
       """
 
-  host = System.get_env("PHX_HOST") || "example.com"
+  host = System.fetch_env!("PHX_HOST")
   port = String.to_integer(System.get_env("PORT") || "4000")
   bind_ip = System.get_env("PHX_BIND_IP") || "127.0.0.1"
 

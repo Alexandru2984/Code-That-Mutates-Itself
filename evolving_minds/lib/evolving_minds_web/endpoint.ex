@@ -13,7 +13,7 @@ defmodule EvolvingMindsWeb.Endpoint do
     http_only: true
   ]
 
-  socket "/live", Phoenix.LiveView.Socket,
+  socket "/live", EvolvingMindsWeb.LiveSocket,
     websocket: [max_frame_size: 65_536, connect_info: [session: @session_options]],
     longpoll: [connect_info: [session: @session_options]]
 

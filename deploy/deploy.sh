@@ -36,7 +36,7 @@ previous="$(readlink -f "$CURRENT" 2>/dev/null || true)"
 
 cd "$APP_DIR"
 printf 'Building release %s\n' "$stamp-$revision"
-mix deps.get --only prod
+mix deps.get --only prod --check-locked
 MIX_ENV=prod mix compile --warnings-as-errors
 MIX_ENV=prod mix assets.deploy
 MIX_ENV=prod mix release --path "$TARGET"

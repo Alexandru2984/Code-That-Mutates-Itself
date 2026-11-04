@@ -36,7 +36,7 @@ defmodule EvolvingMindsWeb.Router do
   scope "/", EvolvingMindsWeb do
     pipe_through :browser
 
-    live_session :public do
+    live_session :public, on_mount: [{EvolvingMindsWeb.PublicAccess, :throttle}] do
       live "/", WorldLive
       live "/tree", TreeLive
     end
@@ -47,6 +47,11 @@ defmodule EvolvingMindsWeb.Router do
 
     get "/healthz", HealthController, :show
     get "/api/world", WorldController, :export
+  end
+
+  scope "/", EvolvingMindsWeb do
+    get "/robots.txt", DiscoveryController, :robots
+    get "/sitemap.xml", DiscoveryController, :sitemap
   end
 
   pipeline :admin do
