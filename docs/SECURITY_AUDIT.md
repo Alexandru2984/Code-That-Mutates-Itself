@@ -121,7 +121,7 @@ nu fac parte din acest audit al repository-ului.
 | Prioritate | Limită reală | Următorul pas |
 | --- | --- | --- |
 | P1 | Backupul activ este pe același VPS. Nu protejează împotriva pierderii întregului server. | Copie externă, criptare/retentie și restaurare verificată pe alt host. |
-| P1 | Aplicația rulează încă drept `micu`, identitate folosită și de alte proiecte. Sandboxul limitează scrierile, dar nu înlocuiește izolarea identității. | Utilizator dedicat; migrare coerentă a permisiunilor release/date/env/backup. |
+| Rezolvat 2026-11-04 | Identitatea Unix comună a fost înlocuită cu `evolving-minds`, fără login/grupuri privilegiate. | Runtime și backup local migrate; release-uri read-only prin ACL, date 0700/0600, env și Git inaccesibile din sandbox. |
 | P1 | Readiness și loguri există, dar nu a fost conectat un serviciu extern de alertare. | Monitor și rută de alertare către proprietar, cu pragurile din runbook. |
 | P2 | Bugetele aplicației sunt locale unui nod, iar un atac distribuit poate ocoli limite per IP. | Buget distribuit la scalare, politici edge și teste de capacitate separate. |
 | P2 | Scannerul de secrete folosește tipare limitate. Istoricul cu cheia revocată nu a fost rescris. | Scanner dedicat și procedură separată pentru curățarea istoricului partajat, dacă este necesar. |

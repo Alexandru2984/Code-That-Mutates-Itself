@@ -7,8 +7,9 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APP_DIR="$REPO_ROOT/evolving_minds"
 SERVICE_NAME="${EVOLVING_MINDS_SERVICE:-evolving-minds-canary.service}"
 ENV_FILE="${EVOLVING_MINDS_ENV:-/etc/evolving-minds/evolving-minds.env}"
-RUN_USER="${EVOLVING_MINDS_USER:-$(id -un)}"
-RUN_GROUP="${EVOLVING_MINDS_GROUP:-$(id -gn)}"
+INSTALLED_USER="$(systemctl show "$SERVICE_NAME" --property=User --value 2>/dev/null || true)"
+RUN_USER="${EVOLVING_MINDS_USER:-${INSTALLED_USER:-evolving-minds}}"
+RUN_GROUP="${EVOLVING_MINDS_GROUP:-$(id -gn "$RUN_USER" 2>/dev/null || printf '%s' "$RUN_USER")}"
 RELEASES="$REPO_ROOT/.releases"
 CURRENT="$REPO_ROOT/current"
 BUILD_ONLY=false
@@ -50,14 +51,15 @@ fi
 
 
 unit_tmp="$(mktemp "$APP_DIR/_build/unit.XXXXXX")"
-python3 - "$REPO_ROOT/deploy/evolving-minds.service" "$unit_tmp" "$REPO_ROOT" "$APP_DIR" "$ENV_FILE" "$RUN_USER" "$RUN_GROUP" <<'PY'
-import pathlib, sys
-source, target, repo, app, env, user, group = sys.argv[1:]
-text = pathlib.Path(source).read_text()
-for key, value in {'REPO_ROOT':repo,'APP_DIR':app,'ENV_FILE':env,'RUN_USER':user,'RUN_GROUP':group}.items():
-    text = text.replace('@'+key+'@', value)
-pathlib.Path(target).write_text(text)
-PY
+python3 "$REPO_ROOT/deploy/render-unit.py" --template "$REPO_ROOT/deploy/evolving-minds.service" --output "$unit_tmp" \
+  --repo-root "$REPO_ROOT" --app-dir "$APP_DIR" --env-file "$ENV_FILE" --user "$RUN_USER" --group "$RUN_GROUP"
+if [[ "$RUN_USER" != "$(id -un)" ]]; then
+  id "$RUN_USER" > /dev/null
+  setfacl -m "u:$RUN_USER:--x" "$RELEASES"
+  setfacl -R -P -m "u:$RUN_USER:r-X" "$TARGET"
+  sudo -u "$RUN_USER" test -r "$TARGET/bin/evolving_minds"
+fi
+
 if [[ -e "/etc/systemd/system/$SERVICE_NAME" ]]; then
   cp "/etc/systemd/system/$SERVICE_NAME" "$RELEASES/$stamp-service.backup"
 fi
@@ -66,6 +68,10 @@ rollback() {
   trap - ERR
   echo 'Deployment failed; restoring the previous release.' >&2
   sudo systemctl stop "$SERVICE_NAME" || true
+  if [[ -f "$RELEASES/$stamp-service.backup" ]]; then
+    sudo install -m 644 "$RELEASES/$stamp-service.backup" "/etc/systemd/system/$SERVICE_NAME"
+    sudo systemctl daemon-reload
+  fi
   if [[ -n "$previous" && -x "$previous/bin/evolving_minds" ]]; then
     switch_release "$previous"
     sudo systemctl start "$SERVICE_NAME" || true
@@ -76,19 +82,15 @@ trap rollback ERR
 
 # Stop through the existing unit before changing either its binary or cookie.
 if systemctl is-active --quiet "$SERVICE_NAME"; then
-  if [[ -L "$CURRENT" ]]; then active_bin="$CURRENT/bin/evolving_minds"; else active_bin="$APP_DIR/_build/prod/rel/evolving_minds/bin/evolving_minds"; fi
-  if ! "$active_bin" rpc 'case EvolvingMinds.Persistence.save_now() do :ok -> :ok; error -> raise inspect(error) end' > /dev/null 2>&1; then
-    echo 'Release RPC unavailable; the graceful service shutdown will flush persistence.'
-  fi
   sudo systemctl stop "$SERVICE_NAME"
 fi
-if [[ -s "$APP_DIR/data/world.snapshot" ]]; then
-  snapshot_age=$(( $(date +%s) - $(stat -c %Y "$APP_DIR/data/world.snapshot") ))
+if sudo test -s "$APP_DIR/data/world.snapshot"; then
+  snapshot_age=$(( $(date +%s) - $(sudo stat -c %Y "$APP_DIR/data/world.snapshot") ))
   if (( snapshot_age > 90 )); then
     echo 'Snapshot is stale after shutdown; refusing to deploy over uncertain world data.' >&2
     rollback
   fi
-  cp --reflink=auto --preserve=mode,timestamps "$APP_DIR/data/world.snapshot" "$RELEASES/$stamp-world.snapshot"
+  sudo install -p -m 600 -o "$(id -un)" -g "$(id -gn)" "$APP_DIR/data/world.snapshot" "$RELEASES/$stamp-world.snapshot"
 fi
 sudo install -m 644 "$unit_tmp" "/etc/systemd/system/$SERVICE_NAME"
 rm -f "$unit_tmp"

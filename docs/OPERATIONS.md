@@ -2,10 +2,10 @@
 
 ## Runtime inventory
 
-- Unit: `evolving-minds-canary.service`, user/group `micu`.
+- Unit: `evolving-minds-canary.service`, dedicated user/group `evolving-minds` (no login or privileged groups).
 - Environment: `/etc/evolving-minds/evolving-minds.env` (root:micu, 0640).
 - HTTP origin: `127.0.0.1:4001`. The public hostname is `elixir.micutu.com`.
-- Working directory: `evolving_minds/`; world: `data/world.snapshot`, 0600.
+- Working directory: `evolving_minds/`; private data directory owned by `evolving-minds`, 0700; snapshot 0600.
 - Release: `current` symlink → private `.releases/<time>-<revision>`.
 - Nginx site: `/etc/nginx/sites-available/elixir.micutu.com`.
 - Local backups: `/srv/backups/evolving-minds`, daily systemd timer, 14 days.
@@ -19,6 +19,15 @@ stops the existing unit gracefully, copies its final snapshot, installs the rend
 unit, switches `current` atomically, and requires a successful readiness response.
 Failure rolls back to the preceding release. The script never overwrites the active
 release while building. Retain at least one verified older payload and snapshot.
+
+`deploy/isolate-runtime.sh` performs the one-time service identity migration and
+keeps a root-readable checkpoint of units, ACLs and the final snapshot. It also
+adapts the local backup service and tests an actual backup before declaring success.
+Regular deploys retain the installed service identity and grant that identity only
+read/execute access to the new release payload. The runtime cannot change code,
+read the operator environment file, or access this checkout's Git metadata.
+The system manager loads runtime values before applying the filesystem sandbox.
+Snapshot copies made by the operator now require sudo; deploy handles this explicitly.
 
 Overrides: `EVOLVING_MINDS_SERVICE`, `EVOLVING_MINDS_ENV`, `EVOLVING_MINDS_USER`,
 `EVOLVING_MINDS_GROUP`. The trusted environment file uses shell-compatible
@@ -63,7 +72,7 @@ without an application CSP. The browser suite tests a real authenticated dashboa
 Stop the service. Preserve the rejected/current snapshot before replacing it.
 Verify the backup checksum and gzip integrity; decompress to a temporary file.
 Validate its structure with `EvolvingMinds.Snapshot.read/1` in a process with
-persistence and evolution disabled. Copy it to `data/world.snapshot` as `micu`,
+persistence and evolution disabled. Copy it to `data/world.snapshot` as `evolving-minds`,
 mode 0600, then start the service and check the restore count and readiness.
 Snapshots are ETF data, never executable imports. Compressed ETF is rejected;
 decompress the backup's gzip wrapper first. Malformed snapshots fail startup so
