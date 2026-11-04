@@ -1,8 +1,8 @@
 defmodule EvolvingMindsWeb.WorldLive do
   use EvolvingMindsWeb, :live_view
 
-  alias EvolvingMinds.World
-  alias EvolvingMindsWeb.WorldPublisher
+  alias EvolvingMinds.{Ancestry, Memory, StateStore, World}
+  alias EvolvingMindsWeb.{Observatory, RateLimiter, WorldPublisher}
 
   @impl true
   def mount(_params, session, socket) do
@@ -10,14 +10,23 @@ defmodule EvolvingMindsWeb.WorldLive do
 
     socket =
       socket
-      |> assign(:query, "")
-      |> assign(:sort, "energy_desc")
-      |> assign(:prev_visible, [])
-      |> assign(:visitor_key, session["visitor_key"])
-      |> assign(:selected_id, nil)
-      |> assign(:selected, nil)
-      |> assign(:show_about, false)
-      |> assign(public_controls: Application.get_env(:evolving_minds, :public_controls, false))
+      |> assign(
+        filters: Observatory.filters(%{}),
+        only_watched: false,
+        watched: [],
+        compared: [],
+        view: "grid",
+        event_filter: "all",
+        observation_paused: false,
+        latest_snapshot: nil,
+        prev_visible: [],
+        selected_id: nil,
+        selected: nil,
+        show_about: false,
+        visitor_key: session["visitor_key"],
+        page_title: "Live Observatory",
+        public_controls: Application.get_env(:evolving_minds, :public_controls, false)
+      )
       |> stream_configure(:entities, dom_id: &"entity-#{&1.id}")
       |> apply_snapshot(WorldPublisher.snapshot(), reset: true)
 
@@ -25,8 +34,20 @@ defmodule EvolvingMindsWeb.WorldLive do
   end
 
   @impl true
+  def handle_params(params, _uri, socket) do
+    id = if Observatory.id?(params["mind"]), do: params["mind"], else: nil
+    selected = build_selected(id)
+    title = if selected, do: "#{selected.name} · Mind Dossier", else: "Live Observatory"
+    {:noreply, assign(socket, selected_id: id, selected: selected, page_title: title)}
+  end
+
+  @impl true
   def handle_info({:world_update, snapshot}, socket) do
-    {:noreply, apply_snapshot(socket, snapshot)}
+    if socket.assigns.observation_paused do
+      {:noreply, assign(socket, :latest_snapshot, snapshot)}
+    else
+      {:noreply, apply_snapshot(socket, snapshot)}
+    end
   end
 
   @impl true
@@ -36,7 +57,7 @@ defmodule EvolvingMindsWeb.WorldLive do
       not controls_enabled?(socket) ->
         {:noreply, socket}
 
-      is_nil(EvolvingMinds.StateStore.get_state(id)) ->
+      is_nil(StateStore.get_state(id)) ->
         {:noreply, put_flash(socket, :error, "This mind is no longer alive.")}
 
       not allowed?(socket, :inject, 5, 10_000) ->
@@ -53,7 +74,6 @@ defmodule EvolvingMindsWeb.WorldLive do
     end
   end
 
-  @impl true
   def handle_event("spawn_mind", _params, socket) do
     cond do
       not controls_enabled?(socket) ->
@@ -66,7 +86,7 @@ defmodule EvolvingMindsWeb.WorldLive do
         case World.spawn_entity() do
           {:ok, pid} ->
             id = World.id_of(pid)
-            name = mind_name(id)
+            name = (StateStore.get_state(id) || %{})[:name] || String.slice(id, 0, 8)
 
             EvolvingMinds.GlobalEvents.report_event(%{
               type: :birth,
@@ -90,169 +110,227 @@ defmodule EvolvingMindsWeb.WorldLive do
     end
   end
 
-  @impl true
   def handle_event("select_entity", %{"id" => id}, socket)
+      when is_binary(id) and byte_size(id) <= 128,
+      do: {:noreply, push_patch(socket, to: ~p"/?#{[mind: id]}")}
+
+  def handle_event("close_entity", _, socket), do: {:noreply, push_patch(socket, to: ~p"/")}
+
+  def handle_event("toggle_about", _, socket),
+    do: {:noreply, assign(socket, :show_about, not socket.assigns.show_about)}
+
+  def handle_event("filter_entities", %{"filters" => filters}, socket) when is_map(filters),
+    do:
+      {:noreply,
+       socket |> assign(:filters, Observatory.filters(filters)) |> refresh_stream(reset: true)}
+
+  def handle_event("clear_filters", _, socket),
+    do:
+      {:noreply,
+       socket
+       |> assign(filters: Observatory.filters(%{}), only_watched: false)
+       |> refresh_stream(reset: true)}
+
+  def handle_event("set_view", %{"view" => view}, socket) when view in ["grid", "map", "leaders"],
+    do: {:noreply, assign(socket, :view, view)}
+
+  def handle_event("filter_events", %{"type" => type}, socket)
+      when type in ["all", "death", "reproduction", "mutation", "epoch_change", "birth"],
+      do: {:noreply, assign(socket, :event_filter, type)}
+
+  def handle_event("toggle_observation", _, socket) do
+    paused = not socket.assigns.observation_paused
+    socket = assign(socket, :observation_paused, paused)
+
+    {:noreply,
+     if(paused,
+       do: socket,
+       else: apply_snapshot(socket, socket.assigns.latest_snapshot || WorldPublisher.snapshot())
+     )}
+  end
+
+  def handle_event("toggle_watch", %{"id" => id}, socket)
       when is_binary(id) and byte_size(id) <= 128 do
-    {:noreply, socket |> assign(:selected_id, id) |> assign(:selected, build_selected(id))}
+    watched = socket.assigns.watched
+
+    cond do
+      id in watched ->
+        {:noreply, socket |> assign(:watched, List.delete(watched, id)) |> refresh_stream()}
+
+      length(watched) >= 12 ->
+        {:noreply, put_flash(socket, :error, "Your watchlist has room for 12 minds.")}
+
+      true ->
+        {:noreply, socket |> assign(:watched, watched ++ [id]) |> refresh_stream()}
+    end
   end
 
-  @impl true
-  def handle_event("close_entity", _params, socket) do
-    {:noreply, socket |> assign(:selected_id, nil) |> assign(:selected, nil)}
+  def handle_event("restore_watchlist", %{"ids" => ids}, socket) when is_list(ids) do
+    watched = ids |> Enum.take(12) |> Enum.filter(&Observatory.id?/1) |> Enum.uniq()
+    {:noreply, socket |> assign(:watched, watched) |> refresh_stream()}
   end
 
-  @impl true
-  def handle_event("toggle_about", _params, socket) do
-    {:noreply, assign(socket, :show_about, not socket.assigns.show_about)}
+  def handle_event("only_watched", _, socket),
+    do:
+      {:noreply,
+       socket
+       |> assign(:only_watched, not socket.assigns.only_watched)
+       |> refresh_stream(reset: true)}
+
+  def handle_event("clear_watchlist", _, socket),
+    do:
+      {:noreply,
+       socket |> assign(watched: [], only_watched: false) |> refresh_stream(reset: true)}
+
+  def handle_event("toggle_compare", %{"id" => id}, socket)
+      when is_binary(id) and byte_size(id) <= 128 do
+    ids = socket.assigns.compared
+
+    cond do
+      id in ids ->
+        {:noreply, socket |> assign(:compared, List.delete(ids, id)) |> refresh_stream()}
+
+      length(ids) >= 3 ->
+        {:noreply, put_flash(socket, :error, "Compare up to three minds at a time.")}
+
+      true ->
+        {:noreply, socket |> assign(:compared, ids ++ [id]) |> refresh_stream()}
+    end
   end
 
-  @impl true
-  def handle_event("filter_entities", %{"filters" => filters}, socket) when is_map(filters) do
-    query =
-      if is_binary(filters["query"]),
-        do: filters["query"] |> String.slice(0, 100) |> String.trim(),
-        else: ""
+  def handle_event("clear_comparison", _, socket),
+    do: {:noreply, socket |> assign(:compared, []) |> refresh_stream()}
 
-    sort = Map.get(filters, "sort", "energy_desc")
+  def handle_event(_, _, socket), do: {:noreply, put_flash(socket, :error, "Invalid action.")}
 
-    socket =
-      socket
-      |> assign(:query, query)
-      |> assign(:sort, sort)
-      |> refresh_stream(socket.assigns.entities, reset: true)
+  defp controls_enabled?(socket),
+    do:
+      socket.assigns.public_controls and
+        Application.get_env(:evolving_minds, :public_controls, false) and
+        is_binary(socket.assigns.visitor_key)
 
-    {:noreply, socket}
-  end
-
-  @impl true
-  def handle_event(_event, _params, socket),
-    do: {:noreply, put_flash(socket, :error, "Invalid action.")}
-
-  defp controls_enabled?(socket) do
-    socket.assigns.public_controls and
-      Application.get_env(:evolving_minds, :public_controls, false) and
-      is_binary(socket.assigns.visitor_key)
-  end
-
-  defp allowed?(socket, action, limit, window) do
-    EvolvingMindsWeb.RateLimiter.allow?({action, socket.assigns.visitor_key}, limit, window) and
-      EvolvingMindsWeb.RateLimiter.allow?({:global, action}, limit * 100, window)
-  end
+  defp allowed?(socket, action, limit, window),
+    do:
+      RateLimiter.allow?({action, socket.assigns.visitor_key}, limit, window) and
+        RateLimiter.allow?({:global, action}, limit * 100, window)
 
   defp apply_snapshot(socket, snapshot, opts \\ []) do
-    entities = merge_memories(snapshot.entities, snapshot.memories)
+    entities =
+      Enum.map(snapshot.entities, &Map.put(&1, :memories, Map.get(snapshot.memories, &1.id, [])))
 
     socket
-    |> assign(:global_events, snapshot.global_events)
-    |> assign(:stats, snapshot.stats)
-    |> assign(:top_interactions, snapshot.top_interactions)
-    |> assign(:epoch, snapshot.epoch)
-    |> assign(:all_time, snapshot.all_time)
-    |> assign(:entities, entities)
-    |> assign(:selected, build_selected(socket.assigns.selected_id))
-    |> refresh_stream(entities, opts)
+    |> assign(
+      entities: entities,
+      global_events: snapshot.global_events,
+      stats: snapshot.stats,
+      top_interactions: snapshot.top_interactions,
+      epoch: snapshot.epoch,
+      all_time: snapshot.all_time,
+      summary: Observatory.summary(entities),
+      selected: build_selected(socket.assigns.selected_id),
+      latest_snapshot: nil,
+      total_population: length(entities)
+    )
+    |> refresh_stream(opts)
   end
 
-  defp mind_name(id) do
-    case EvolvingMinds.StateStore.get_state(id) do
-      %{name: name} -> name
-      _ -> String.slice(id, 0, 8)
-    end
-  end
-
-  # The detail panel reads fresh state directly; a nil result for a
-  # still-selected id means the mind died while being watched.
-  defp build_selected(nil), do: nil
-
-  defp build_selected(id) do
-    case EvolvingMinds.StateStore.get_state(id) do
-      nil ->
-        nil
-
-      state ->
-        state
-        |> Map.delete(:behavior_fn)
-        |> Map.put(:memories, EvolvingMinds.Memory.get_memories(id))
-        |> Map.put(:age, System.system_time(:second) - state.born_at)
-        |> Map.put(:ancestors, id |> EvolvingMinds.Ancestry.lineage() |> Enum.drop(1))
-    end
-  end
-
-  # Memories ride inside each stream item: a stream card only re-renders
-  # when re-inserted, so everything it displays must be part of the item.
-  defp merge_memories(entities, memories) do
-    Enum.map(entities, &Map.put(&1, :memories, Map.get(memories, &1.id, [])))
-  end
-
-  defp refresh_stream(socket, entities, opts) do
+  defp refresh_stream(socket, opts \\ []) do
     visible =
-      entities |> filter_entities(socket.assigns.query) |> sort_entities(socket.assigns.sort)
+      Observatory.visible(
+        socket.assigns.entities,
+        socket.assigns.filters,
+        socket.assigns.watched,
+        socket.assigns.only_watched
+      )
+      |> Enum.map(
+        &Map.merge(&1, %{
+          watched: &1.id in socket.assigns.watched,
+          compared: &1.id in socket.assigns.compared
+        })
+      )
 
-    prev_visible = socket.assigns.prev_visible
+    previous = socket.assigns.prev_visible
 
     socket =
-      socket
-      |> assign(:prev_visible, visible)
-      |> assign(:visible_count, length(visible))
-      |> assign(:total_population, length(entities))
+      assign(socket,
+        prev_visible: visible,
+        visible_count: length(visible),
+        visible_entities: visible
+      )
 
-    if Keyword.get(opts, :reset, false) do
-      stream(socket, :entities, visible, reset: true)
-    else
-      diff_stream(socket, prev_visible, visible)
-    end
+    if Keyword.get(opts, :reset, false),
+      do: stream(socket, :entities, visible, reset: true),
+      else: diff_stream(socket, previous, visible)
   end
 
-  # Sends only what changed: deletes for entities that left the visible
-  # set, and positional re-inserts for entities whose data or sort index
-  # changed. Untouched cards produce no payload at all.
-  defp diff_stream(socket, prev_visible, visible) do
-    prev_by_id = Map.new(prev_visible, &{&1.id, &1})
-
-    prev_index =
-      prev_visible |> Enum.with_index() |> Map.new(fn {entity, i} -> {entity.id, i} end)
-
-    visible_ids = MapSet.new(visible, & &1.id)
+  defp diff_stream(socket, previous, visible) do
+    prev = previous |> Enum.with_index() |> Map.new(fn {e, i} -> {e.id, {e, i}} end)
+    ids = MapSet.new(visible, & &1.id)
 
     socket =
-      Enum.reduce(prev_visible, socket, fn entity, acc ->
-        if MapSet.member?(visible_ids, entity.id) do
-          acc
-        else
-          stream_delete(acc, :entities, entity)
-        end
+      Enum.reduce(previous, socket, fn e, acc ->
+        if MapSet.member?(ids, e.id), do: acc, else: stream_delete(acc, :entities, e)
       end)
 
     visible
     |> Enum.with_index()
-    |> Enum.reduce(socket, fn {entity, index}, acc ->
-      if Map.get(prev_by_id, entity.id) == entity and Map.get(prev_index, entity.id) == index do
-        acc
-      else
-        stream_insert(acc, :entities, entity, at: index)
-      end
+    |> Enum.reduce(socket, fn {e, i}, acc ->
+      if prev[e.id] == {e, i}, do: acc, else: stream_insert(acc, :entities, e, at: i)
     end)
   end
 
-  defp filter_entities(entities, ""), do: entities
+  defp build_selected(nil), do: nil
 
-  defp filter_entities(entities, query) do
-    normalized_query = String.downcase(query)
+  defp build_selected(id) do
+    case StateStore.get_state(id) do
+      nil ->
+        case Ancestry.get(id) do
+          nil ->
+            nil
 
-    Enum.filter(entities, fn entity ->
-      entity.id |> String.downcase() |> String.contains?(normalized_query)
-    end)
+          record ->
+            Map.merge(record, %{
+              alive: false,
+              age: max((record.died_at || System.system_time(:second)) - record.born_at, 0)
+            })
+        end
+
+      state ->
+        state
+        |> Map.delete(:behavior_fn)
+        |> Map.merge(%{
+          alive: true,
+          memories: Memory.get_memories(id),
+          age: max(System.system_time(:second) - state.born_at, 0),
+          ancestors: Enum.drop(Ancestry.lineage(id), 1)
+        })
+    end
   end
 
-  defp sort_entities(entities, "energy_asc"), do: Enum.sort_by(entities, & &1.energy)
+  defp lookup(entities, id),
+    do:
+      Enum.find(entities, &(&1.id == id)) || Ancestry.get(id) ||
+        %{id: id, name: String.slice(id, 0, 8)}
 
-  defp sort_entities(entities, "aggression_desc"),
-    do: Enum.sort_by(entities, & &1.traits.aggression, :desc)
+  defp pct(trait), do: round(trait * 100)
+  defp format_age(value), do: Observatory.age(value)
+  defp filtered_events(events, "all"), do: events
+  defp filtered_events(events, filter), do: Enum.filter(events, &(to_string(&1.type) == filter))
 
-  defp sort_entities(entities, "curiosity_desc"),
-    do: Enum.sort_by(entities, & &1.traits.curiosity, :desc)
+  defp line_points(stats, field) do
+    values = Enum.reverse(stats)
 
-  defp sort_entities(entities, _), do: Enum.sort_by(entities, & &1.energy, :desc)
+    max_value =
+      if field == :population,
+        do: max(Enum.max(Enum.map(values, & &1.population), fn -> 1 end), 1),
+        else: 1
+
+    values
+    |> Enum.with_index()
+    |> Enum.map_join(" ", fn {value, i} ->
+      "#{i * 100 / max(length(values) - 1, 1)},#{95 - Map.fetch!(value, field) / max_value * 85}"
+    end)
+  end
 
   # The event feed reads as a story; every branch degrades gracefully
   # for events recorded before names existed.
@@ -286,971 +364,633 @@ defmodule EvolvingMindsWeb.WorldLive do
   defp fallback_name(%{entity_id: id}) when is_binary(id), do: String.slice(id, 0, 8)
   defp fallback_name(_event), do: "A mind"
 
-  defp epoch_class(:abundance), do: "text-emerald-400"
-  defp epoch_class(:famine), do: "text-rose-400"
-  defp epoch_class(_), do: "text-slate-500"
-
-  defp tribe_class(:solari), do: "text-amber-400"
-  defp tribe_class(:umbra), do: "text-violet-400"
-  defp tribe_class(_), do: "text-slate-500"
-
-  defp tribe_counts(entities) do
-    solari = Enum.count(entities, &(Map.get(&1, :tribe) == :solari))
-    umbra = Enum.count(entities, &(Map.get(&1, :tribe) == :umbra))
-    {solari, umbra}
-  end
-
-  defp tribe_share(part, total) when total > 0, do: round(part / total * 100)
-  defp tribe_share(_part, _total), do: 50
-
-  defp epoch_label(:abundance), do: "Epoch: Abundance"
-  defp epoch_label(:famine), do: "Epoch: Famine"
-  defp epoch_label(_), do: "Epoch: Normal"
-
-  defp format_age(seconds) when seconds >= 3600,
-    do: "#{div(seconds, 3600)}h #{div(rem(seconds, 3600), 60)}m"
-
-  defp format_age(seconds) when seconds >= 60, do: "#{div(seconds, 60)}m #{rem(seconds, 60)}s"
-  defp format_age(seconds), do: "#{seconds}s"
-
-  defp population_points(stats) when length(stats) > 1 do
-    max_pop = stats |> Enum.map(& &1.population) |> Enum.max() |> max(1)
-    n = length(stats)
-
-    stats
-    |> Enum.reverse()
-    |> Enum.with_index()
-    |> Enum.map_join(" ", fn {s, i} ->
-      "#{i * (100 / (n - 1))},#{100 - s.population / max_pop * 90}"
-    end)
-  end
-
-  defp population_points(_), do: nil
-
-  # Distribution of living minds across the 12 most recent generations,
-  # as {generation, count, percent-of-max} for bar heights.
-  defp generation_histogram(entities) do
-    counts = Enum.frequencies_by(entities, &Map.get(&1, :generation, 1))
-    shown = counts |> Map.keys() |> Enum.sort() |> Enum.take(-12)
-    max_count = shown |> Enum.map(&counts[&1]) |> Enum.max(fn -> 1 end)
-
-    Enum.map(shown, fn gen -> {gen, counts[gen], round(counts[gen] / max_count * 100)} end)
-  end
-
-  # 10-bucket distribution of a trait across the living population,
-  # as {count, percent-of-max} pairs for bar heights.
-  defp histogram(entities, trait) do
-    counts =
-      Enum.reduce(entities, List.duplicate(0, 10), fn entity, acc ->
-        bucket = min(9, trunc(Map.fetch!(entity.traits, trait) * 10))
-        List.update_at(acc, bucket, &(&1 + 1))
-      end)
-
-    max_count = max(Enum.max(counts), 1)
-    Enum.map(counts, &{&1, round(&1 / max_count * 100)})
-  end
-
   @impl true
   def render(assigns) do
     ~H"""
-    <div class="min-h-screen w-full bg-[#050608] text-slate-300 font-sans selection:bg-cyan-500/30 flex flex-col">
-      <!-- Fixed Header for better UX on long lists -->
-      <header class="sticky top-0 z-50 w-full bg-[#050608]/80 backdrop-blur-xl border-b border-white/5 px-4 py-4 md:px-8">
-        <div class="max-w-[2400px] mx-auto flex flex-col xl:flex-row items-stretch xl:items-center justify-between gap-4">
-          <div class="relative group text-center sm:text-left">
-            <div class="absolute -inset-2 bg-gradient-to-r from-cyan-600 to-blue-700 rounded-xl blur-lg opacity-20 group-hover:opacity-40 transition duration-1000">
-            </div>
-            <h1 class="relative text-3xl md:text-4xl font-black tracking-normal text-white">
-              Evolving
-              <span class="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-blue-500 to-indigo-600">
-                Minds
-              </span>
-            </h1>
-            <div class="flex flex-wrap items-center justify-center sm:justify-start gap-3 mt-1">
-              <p class="text-slate-500 font-mono text-[9px] uppercase tracking-[0.2em] sm:tracking-[0.4em]">
-                Autonomous Heuristic Simulator
-              </p>
-              <span class="text-[9px] text-cyan-500/50 font-bold uppercase tracking-widest animate-pulse">
-                Live
-              </span>
-            </div>
-          </div>
-
-          <form
-            id="filter-form"
-            phx-change="filter_entities"
-            class="grid grid-cols-1 sm:grid-cols-[minmax(180px,1fr)_180px] gap-3 w-full xl:max-w-xl"
-          >
-            <div class="relative">
-              <input
-                type="search"
-                name="filters[query]"
-                value={@query}
-                placeholder="Filter entity ID"
-                class="w-full h-11 rounded-xl border border-white/10 bg-black/30 px-4 text-sm text-slate-200 placeholder:text-slate-600 focus:border-cyan-500/60 focus:ring-cyan-500/20"
-              />
-            </div>
-            <select
-              name="filters[sort]"
-              value={@sort}
-              class="h-11 rounded-xl border border-white/10 bg-black/30 px-4 text-sm text-slate-200 focus:border-cyan-500/60 focus:ring-cyan-500/20"
-            >
-              <option value="energy_desc">Energy high</option>
-              <option value="energy_asc">Energy low</option>
-              <option value="aggression_desc">Aggression</option>
-              <option value="curiosity_desc">Curiosity</option>
-            </select>
-          </form>
-
-          <div class="flex items-center justify-center xl:justify-start gap-4 bg-slate-900/40 backdrop-blur-3xl border border-white/10 px-4 sm:px-6 py-3 rounded-2xl shadow-2xl">
-            <div class="flex flex-col items-center border-r border-white/10 pr-6">
-              <span class="text-[8px] uppercase tracking-[0.2em] text-slate-500 font-bold mb-0.5">
-                Population
-              </span>
-              <span class="text-2xl font-black text-white leading-none tabular-nums">
-                {@total_population}
-              </span>
-            </div>
-            <div class="flex flex-col items-center border-r border-white/10 pr-6">
-              <span class="text-[8px] uppercase tracking-[0.2em] text-slate-500 font-bold mb-0.5">
-                Visible
-              </span>
-              <span class="text-2xl font-black text-white leading-none tabular-nums">
-                {@visible_count}
-              </span>
-            </div>
-            <div class="flex flex-col items-start gap-0.5 pl-2">
-              <div class="flex items-center gap-2">
-                <div class="w-1.5 h-1.5 rounded-full bg-cyan-500 animate-ping"></div>
-                <span class="text-[9px] font-mono text-cyan-500 font-bold uppercase tracking-widest">
-                  Uplink Active
-                </span>
-              </div>
-              <span class={"text-[9px] font-mono font-bold uppercase tracking-widest #{epoch_class(@epoch)}"}>
-                {epoch_label(@epoch)}
-              </span>
-            </div>
-            <div class="flex flex-col gap-1 border-l border-white/10 pl-4 min-w-[110px]">
-              <% {solari, umbra} = tribe_counts(@entities) %>
-              <div class="flex justify-between text-[8px] font-black uppercase tracking-widest">
-                <span class="text-amber-400">Solari {solari}</span>
-                <span class="text-violet-400">{umbra} Umbra</span>
-              </div>
-              <div class="h-1.5 w-full rounded-full overflow-hidden bg-black/40 flex">
-                <div
-                  class="h-full bg-amber-500 transition-all duration-1000"
-                  style={"width: #{tribe_share(solari, solari + umbra)}%"}
-                >
-                </div>
-                <div class="h-full bg-violet-500 flex-1 transition-all duration-1000"></div>
-              </div>
-            </div>
-            <%= if @public_controls do %>
-              <button
-                phx-click="spawn_mind"
-                class="ml-2 px-3 py-2 rounded-xl border border-emerald-500/30 bg-emerald-500/5 hover:bg-emerald-500/20 transition-all duration-300"
-              >
-                <span class="text-[9px] font-black text-emerald-400 uppercase tracking-widest">
-                  Spawn a Mind
-                </span>
-              </button>
-            <% end %>
-            <.link
-              navigate={~p"/tree"}
-              class="ml-2 px-3 py-2 rounded-xl border border-white/10 bg-white/[0.02] hover:bg-white/10 transition-all duration-300"
-            >
-              <span class="text-[9px] font-black text-slate-400 uppercase tracking-widest">
-                Dynasties
-              </span>
-            </.link>
-            <button
-              phx-click="toggle_about"
-              class="ml-2 px-3 py-2 rounded-xl border border-white/10 bg-white/[0.02] hover:bg-white/10 transition-all duration-300"
-            >
-              <span class="text-[9px] font-black text-slate-400 uppercase tracking-widest">
-                What is this?
-              </span>
-            </button>
-          </div>
-        </div>
+    <div
+      id="observatory"
+      class="observatory"
+      phx-hook="Watchlist"
+      data-watchlist={Jason.encode!(@watched)}
+    >
+      <header class="site-header">
+        <a href="/" class="brand" aria-label="Evolving Minds home"><span
+          class="brand-mark"
+          aria-hidden="true"
+        >◎</span><span>Evolving <strong>Minds</strong><small>THE LIVING OBSERVATORY</small></span></a>
+        <nav aria-label="Main navigation">
+          <a href="#explore" class="nav-active">Observatory</a><.link navigate={~p"/tree"}>Dynasties</.link><button phx-click="toggle_about">Field guide
+          <span aria-hidden="true">↗</span></button>
+        </nav>
+        <span class="connection-state"><i aria-hidden="true"></i><span class="when-connected">Live world</span><span class="when-disconnected">Reconnecting…</span></span>
       </header>
-      <!-- Full-Width Main Content -->
-      <main class="flex-1 w-full px-4 py-6 md:px-8 md:py-8 overflow-visible lg:overflow-hidden flex flex-col lg:flex-row gap-6 lg:gap-8">
-        <!-- Main Simulation Grid -->
-        <div class="flex-1 overflow-auto custom-scrollbar-none">
-          <div
-            id="entities-grid"
-            phx-update="stream"
-            class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4 md:gap-6"
-          >
-            <%= for {dom_id, entity} <- @streams.entities do %>
-              <div
-                id={dom_id}
-                class="group relative bg-slate-900/20 backdrop-blur-xl border border-white/5 rounded-[2rem] p-1 transition-all duration-500 hover:scale-[1.01] hover:border-cyan-500/30"
-              >
-                <div class="bg-[#0b0d15]/95 rounded-[1.8rem] p-5 h-full flex flex-col border border-white/[0.02]">
-                  <!-- Entity Header -->
-                  <div class="flex justify-between items-start mb-5">
-                    <div class="flex items-center gap-3">
-                      <div class={"w-10 h-10 rounded-xl flex items-center justify-center border transition-all duration-500 shadow-inner #{if entity.energy > 50, do: "bg-cyan-500/10 border-cyan-500/20 text-cyan-400", else: "bg-orange-500/10 border-orange-500/20 text-orange-400"}"}>
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          viewBox="0 0 24 24"
-                          fill="currentColor"
-                          class="w-6 h-6"
-                        >
-                          <path d="M11.7 2.805a.75.75 0 0 1 .6 0A60.65 60.65 0 0 1 22.83 8.72a.75.75 0 0 1-.231 1.337 49.948 49.948 0 0 0-9.902 3.912l-.003.002-.34.18a.75.75 0 0 1-.707 0A50.88 50.88 0 0 0 7.5 12.173v-.224c0-.131.067-.248.172-.311a54.615 54.615 0 0 1 4.653-2.52.75.75 0 0 0-.65-1.352 56.123 56.123 0 0 0-4.78 2.589 2.258 2.258 0 0 0-1.095 1.944v.647a.75.75 0 0 1-.12.413l-1.95 3.177a3.75 3.75 0 0 0 3.185 5.706h11.27a3.75 3.75 0 0 0 3.185-5.706l-1.95-3.177a.75.75 0 0 1-.12-.413v-.647c0-1.226-.78-2.316-1.93-2.731a61.763 61.763 0 0 0-14.898-3.924.75.75 0 0 1-.23-1.337A62.152 62.152 0 0 1 11.7 2.805Z" />
-                        </svg>
-                      </div>
-                      <div>
-                        <p class="text-white font-black text-base tracking-tight">
-                          {Map.get(entity, :name, "Unnamed")}
-                        </p>
-                        <span class="text-[8px] font-mono text-slate-600">
-                          {String.slice(entity.id, 0, 8)}
-                        </span>
-                        <span class="text-[8px] font-mono font-bold uppercase tracking-widest block">
-                          <span class="text-purple-400/80">Gen {Map.get(entity, :generation, 1)}</span>
-                          <span class={tribe_class(Map.get(entity, :tribe))}>
-                            · {Map.get(entity, :tribe, :unaligned)}
-                          </span>
-                        </span>
-                      </div>
-                    </div>
-
-                    <div class="flex flex-col items-end gap-1.5">
-                      <%= if @public_controls do %>
-                        <button
-                          phx-click="inject_energy"
-                          phx-value-id={entity.id}
-                          class="group/btn relative px-3 py-1.5 rounded-xl border border-cyan-500/30 bg-cyan-500/5 hover:bg-cyan-500/20 transition-all duration-300"
-                        >
-                          <span class="text-[9px] font-black text-cyan-400 uppercase tracking-widest">
-                            + Energy
-                          </span>
-                        </button>
-                      <% end %>
-                      <button
-                        phx-click="select_entity"
-                        phx-value-id={entity.id}
-                        class="px-3 py-1.5 rounded-xl border border-white/10 bg-white/[0.02] hover:bg-white/10 transition-all duration-300"
-                      >
-                        <span class="text-[9px] font-black text-slate-400 uppercase tracking-widest">
-                          Details
-                        </span>
-                      </button>
-                    </div>
-                  </div>
-                  <!-- Traits Section -->
-                  <div class="grid grid-cols-2 gap-3 mb-6">
-                    <div class="bg-white/[0.02] rounded-xl p-3 border border-white/[0.03]">
-                      <span class="text-[8px] uppercase tracking-widest text-slate-500 font-bold block mb-1">
-                        AGGR
-                      </span>
-                      <div class="flex items-center gap-2">
-                        <div class="flex-1 h-1 bg-black/40 rounded-full overflow-hidden">
-                          <div
-                            class="h-full bg-orange-500 transition-all duration-1000"
-                            style={"width: #{entity.traits.aggression * 100}%"}
-                          >
-                          </div>
-                        </div>
-                        <span class="text-[9px] font-mono font-bold text-orange-400">
-                          {Float.round(entity.traits.aggression, 1)}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div class="bg-white/[0.02] rounded-xl p-3 border border-white/[0.03]">
-                      <span class="text-[8px] uppercase tracking-widest text-slate-500 font-bold block mb-1">
-                        CURI
-                      </span>
-                      <div class="flex items-center gap-2">
-                        <div class="flex-1 h-1 bg-black/40 rounded-full overflow-hidden">
-                          <div
-                            class="h-full bg-cyan-500 transition-all duration-1000"
-                            style={"width: #{entity.traits.curiosity * 100}%"}
-                          >
-                          </div>
-                        </div>
-                        <span class="text-[9px] font-mono font-bold text-cyan-400">
-                          {Float.round(entity.traits.curiosity, 1)}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                  <!-- Energy Bar -->
-                  <div class="mb-5">
-                    <div class="flex justify-between items-center mb-1.5">
-                      <span class="text-[8px] uppercase tracking-widest text-slate-500 font-bold">
-                        Vitality
-                      </span>
-                      <span class={"text-[9px] font-mono font-bold #{if entity.energy > 50, do: "text-cyan-400", else: "text-orange-400"}"}>
-                        {entity.energy}%
-                      </span>
-                    </div>
-                    <div class="h-1.5 w-full bg-black/40 rounded-full overflow-hidden border border-white/5">
-                      <div
-                        class={"h-full transition-all duration-1000 #{if entity.energy > 50, do: "bg-cyan-500", else: "bg-orange-500"}"}
-                        style={"width: #{entity.energy}%"}
-                      >
-                      </div>
-                    </div>
-                  </div>
-                  <!-- Behavior Source (Minimized) -->
-                  <div class="mb-5 flex-1 flex flex-col min-h-0">
-                    <div class="flex items-center gap-2 mb-2">
-                      <div class="w-1 h-1 rounded-full bg-cyan-500/50"></div>
-                      <h3 class="text-[9px] uppercase tracking-widest text-cyan-400/80 font-black">
-                        Heuristic
-                      </h3>
-                    </div>
-                    <pre class="flex-1 text-[9px] leading-relaxed bg-[#05060a] border border-white/[0.05] p-3 rounded-xl text-cyan-100/40 font-mono overflow-auto max-h-[100px] custom-scrollbar">
-    <%= entity.behavior_source %>
-                    </pre>
-                  </div>
-                  <!-- Memory Stream -->
-                  <div class="mt-auto">
-                    <div class="space-y-1.5">
-                      <%= for {type, sender} <- entity.memories do %>
-                        <div class="flex items-center justify-between bg-white/[0.02] p-2 rounded-lg border border-white/5 transition-colors">
-                          <div class="flex items-center gap-2">
-                            <div class={"w-1.5 h-1.5 rounded-full #{case type do
-                              :attack -> "bg-rose-500"
-                              :greet -> "bg-emerald-500"
-                              _ -> "bg-amber-400"
-                            end}"}>
-                            </div>
-                            <span class="text-[9px] font-bold text-slate-400 uppercase">
-                              {type}
-                            </span>
-                          </div>
-                          <span class="text-[8px] font-mono text-slate-600">
-                            → {String.slice(sender, 0, 4)}
-                          </span>
-                        </div>
-                      <% end %>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            <% end %>
+      <main id="main-content" class="observatory-main">
+        <section class="world-intro" aria-labelledby="world-title">
+          <div>
+            <p class="eyebrow">
+              AUTONOMOUS HEURISTIC SIMULATOR <span>• EXPERIMENT IN PROGRESS</span>
+            </p><h1 id="world-title">A small world.<br /><span>Endless possibilities.</span></h1><p class="intro-copy">
+              They meet, compete, cooperate, and evolve. Follow a digital mind. See which way life goes.
+            </p>
           </div>
-
-          <%= if @visible_count == 0 do %>
-            <div class="min-h-56 flex items-center justify-center rounded-2xl border border-white/10 bg-slate-900/20 p-8 text-center">
-              <div>
-                <p class="text-xs font-black uppercase tracking-[0.3em] text-slate-500">
-                  No entities match
-                </p>
-                <p class="mt-2 text-sm text-slate-600">
-                  Clear the filter or wait for the next generation.
-                </p>
-              </div>
-            </div>
-          <% end %>
-        </div>
-        <!-- Sidebar for Logs and Stats -->
-        <aside class="w-full lg:w-[400px] flex flex-col gap-8">
-          <!-- Global Logs -->
-          <div class="bg-slate-900/40 backdrop-blur-3xl border border-white/10 rounded-[2rem] p-6 flex flex-col h-[400px]">
-            <div class="flex items-center justify-between mb-6">
-              <h3 class="text-xs font-black text-white uppercase tracking-[0.3em]">Global Events</h3>
-              <div class="px-2 py-0.5 rounded-md bg-cyan-500/10 border border-cyan-500/20">
-                <span class="text-[8px] font-bold text-cyan-500 uppercase tracking-widest">
-                  Real-time
-                </span>
-              </div>
-            </div>
-
-            <div class="flex-1 overflow-auto custom-scrollbar space-y-3 pr-2">
-              <%= for event <- @global_events do %>
-                <div class="bg-black/40 border border-white/5 p-3 rounded-xl flex flex-col gap-1">
-                  <div class="flex items-center justify-between">
-                    <span class={"text-[9px] font-black uppercase tracking-widest #{case event.type do
-                      :death -> "text-rose-500"
-                      :mutation -> "text-purple-400"
-                      :birth -> "text-emerald-400"
-                      :reproduction -> "text-cyan-400"
-                      :epoch_change -> "text-amber-400"
-                      _ -> "text-slate-400"
-                    end}"}>
-                      {event.type}
-                    </span>
-                    <span class="text-[8px] font-mono text-slate-600">
-                      {Calendar.strftime(event.timestamp, "%H:%M:%S")}
-                    </span>
-                  </div>
-                  <p class="text-[10px] text-slate-400 font-medium">
-                    {event_sentence(event)}
-                  </p>
-                </div>
-              <% end %>
-              <%= if Enum.empty?(@global_events) do %>
-                <div class="h-full flex items-center justify-center opacity-20">
-                  <p class="text-[9px] font-bold text-slate-500 uppercase tracking-[0.2em]">
-                    Monitoring Initializing...
-                  </p>
-                </div>
-              <% end %>
+          <div class={"epoch-panel epoch-#{@epoch}"}>
+            <span class="eyebrow">CURRENT ENVIRONMENT</span><span
+              class="epoch-orbit"
+              aria-hidden="true"
+            >◌</span><h2>{String.capitalize(to_string(@epoch))}</h2><p>
+              {case @epoch do
+                :famine -> "Resources are scarce. Survival gets harder."
+                :abundance -> "Energy is plentiful. A chance to flourish."
+                _ -> "A delicate balance of risk and reward."
+              end}
+            </p><span class="epoch-cost">{EvolvingMinds.Environment.act_cost()} energy per action</span>
+          </div>
+        </section>
+        <section class="world-metrics" aria-label="World at a glance">
+          <div>
+            <span class="metric-label">Population</span><strong>{@total_population}<small>/ 50</small></strong><span>autonomous minds</span>
+          </div>
+          <div>
+            <span class="metric-label">Average energy</span><strong>{@summary.energy}<small>%</small></strong><span>{@summary.critical} in critical condition</span>
+          </div>
+          <div>
+            <span class="metric-label">Generation</span><strong>{@summary.generation}</strong><span>furthest living descendant</span>
+          </div>
+          <div class="tribe-metric">
+            <span class="metric-label">Two tribes, one world</span><div class="tribe-numbers">
+              <strong class="solari">{@summary.solari}<small>Solari</small></strong><strong class="umbra">{@summary.umbra}<small>Umbra</small></strong>
+            </div><div
+              class="tribe-balance"
+              aria-label={"Solari #{@summary.solari}, Umbra #{@summary.umbra}"}
+            >
+              <span style={"width: #{if @total_population > 0, do: round(@summary.solari / @total_population * 100), else: 50}%"}></span>
             </div>
           </div>
-          <!-- Evolution Stats -->
-          <div class="bg-slate-900/40 backdrop-blur-3xl border border-white/10 rounded-[2rem] p-6">
-            <h3 class="text-xs font-black text-white uppercase tracking-[0.3em] mb-6">
-              Evolution Trends
-            </h3>
-
-            <div class="space-y-6">
-              <%= if !Enum.empty?(@stats) do %>
-                <% current = List.first(@stats) %>
-                <div class="grid grid-cols-2 gap-4">
-                  <div class="bg-black/40 p-3 rounded-2xl border border-white/5">
-                    <span class="text-[8px] text-slate-500 uppercase font-black block mb-1">
-                      Avg Aggression
-                    </span>
-                    <span class="text-xl font-black text-orange-500 tabular-nums">
-                      {Float.round(current.avg_aggression, 2)}
-                    </span>
-                  </div>
-                  <div class="bg-black/40 p-3 rounded-2xl border border-white/5">
-                    <span class="text-[8px] text-slate-500 uppercase font-black block mb-1">
-                      Avg Curiosity
-                    </span>
-                    <span class="text-xl font-black text-cyan-500 tabular-nums">
-                      {Float.round(current.avg_curiosity, 2)}
-                    </span>
-                  </div>
-                </div>
-                <!-- Simple SVG Sparkline visualization -->
-                <div class="h-32 w-full bg-black/40 rounded-2xl border border-white/5 p-4 relative overflow-hidden">
-                  <svg class="w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
-                    <!-- Aggression line -->
-                    <polyline
-                      fill="none"
-                      stroke="#f97316"
-                      stroke-width="2"
-                      stroke-linecap="round"
-                      points={
-                        if length(@stats) > 1 do
-                          @stats
-                          |> Enum.reverse()
-                          |> Enum.with_index()
-                          |> Enum.map_join(" ", fn {s, i} ->
-                            "#{i * (100 / (length(@stats) - 1))},#{100 - s.avg_aggression * 100}"
-                          end)
-                        else
-                          "0,#{100 - (List.first(@stats) || %{avg_aggression: 0}).avg_aggression * 100} 100,#{100 - (List.first(@stats) || %{avg_aggression: 0}).avg_aggression * 100}"
-                        end
-                      }
-                    />
-                    <!-- Curiosity line -->
-                    <polyline
-                      fill="none"
-                      stroke="#06b6d4"
-                      stroke-width="2"
-                      stroke-linecap="round"
-                      points={
-                        if length(@stats) > 1 do
-                          @stats
-                          |> Enum.reverse()
-                          |> Enum.with_index()
-                          |> Enum.map_join(" ", fn {s, i} ->
-                            "#{i * (100 / (length(@stats) - 1))},#{100 - s.avg_curiosity * 100}"
-                          end)
-                        else
-                          "0,#{100 - (List.first(@stats) || %{avg_curiosity: 0}).avg_curiosity * 100} 100,#{100 - (List.first(@stats) || %{avg_curiosity: 0}).avg_curiosity * 100}"
-                        end
-                      }
-                    />
-                  </svg>
-                  <div class="absolute bottom-2 left-4 flex gap-4">
-                    <div class="flex items-center gap-1.5">
-                      <div class="w-2 h-2 rounded-full bg-orange-500"></div>
-                      <span class="text-[7px] font-bold text-slate-500 uppercase">Aggr</span>
-                    </div>
-                    <div class="flex items-center gap-1.5">
-                      <div class="w-2 h-2 rounded-full bg-cyan-500"></div>
-                      <span class="text-[7px] font-bold text-slate-500 uppercase">Curi</span>
-                    </div>
-                  </div>
-                </div>
+        </section>
+        <section
+          :if={@compared != []}
+          id="comparison"
+          class="panel comparison"
+          aria-labelledby="compare-heading"
+        >
+          <div class="section-heading">
+            <h2 id="compare-heading">Compare minds <span>{length(@compared)}/3</span></h2><button
+              class="text-button"
+              phx-click="clear_comparison"
+            >Clear comparison</button>
+          </div>
+          <div class="comparison-grid">
+            <div :for={id <- @compared} class="comparison-item">
+              <% mind = lookup(@entities, id) %>
+              <div class="section-heading">
+                <.link patch={~p"/?#{[mind: id]}"}>{mind.name || String.slice(id, 0, 8)}</.link><button
+                  phx-click="toggle_compare"
+                  phx-value-id={id}
+                  aria-label={"Remove #{mind.name} from comparison"}
+                >×</button>
+              </div>
+              <%= if mind[:traits] do %>
+                <p><span>Energy</span><strong>{mind.energy}%</strong></p><p>
+                  <span>Aggression</span><strong>{pct(mind.traits.aggression)}%</strong>
+                </p><p><span>Curiosity</span><strong>{pct(mind.traits.curiosity)}%</strong></p><p>
+                  <span>Generation</span><strong>{mind.generation}</strong>
+                </p><p>
+                  <span>Strategy</span><strong>{Observatory.personality(mind.traits)}</strong>
+                </p>
               <% else %>
-                <div class="h-32 flex items-center justify-center opacity-20">
-                  <p class="text-[9px] font-bold text-slate-500 uppercase tracking-[0.2em]">
-                    Calculating Traits...
-                  </p>
-                </div>
-              <% end %>
-              <!-- Population over time -->
-              <div>
-                <div class="flex justify-between items-center mb-1.5">
-                  <span class="text-[8px] uppercase tracking-widest text-slate-500 font-bold">
-                    Population
-                  </span>
-                  <span class="text-[9px] font-mono font-bold text-emerald-400">
-                    {@total_population}
-                  </span>
-                </div>
-                <div class="h-16 w-full bg-black/40 rounded-2xl border border-white/5 p-3">
-                  <%= if points = population_points(@stats) do %>
-                    <svg class="w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
-                      <polyline
-                        fill="none"
-                        stroke="#34d399"
-                        stroke-width="3"
-                        stroke-linecap="round"
-                        points={points}
-                      />
-                    </svg>
-                  <% else %>
-                    <div class="h-full flex items-center justify-center opacity-20">
-                      <span class="text-[8px] font-bold text-slate-500 uppercase tracking-widest">
-                        Collecting...
-                      </span>
-                    </div>
-                  <% end %>
-                </div>
-              </div>
-              <!-- Trait distribution histograms -->
-              <div>
-                <span class="text-[8px] uppercase tracking-widest text-slate-500 font-bold block mb-1.5">
-                  Trait Distribution
-                </span>
-                <div class="grid grid-cols-2 gap-3">
-                  <div class="bg-black/40 rounded-2xl border border-white/5 p-3">
-                    <div class="flex items-end gap-0.5 h-12">
-                      <%= for {count, pct} <- histogram(@entities, :aggression) do %>
-                        <div
-                          class="flex-1 bg-orange-500/70 rounded-t-sm"
-                          style={"height: #{max(pct, 4)}%"}
-                          title={"#{count}"}
-                        >
-                        </div>
-                      <% end %>
-                    </div>
-                    <span class="text-[7px] font-bold text-orange-400/80 uppercase block mt-1.5">
-                      Aggression 0 → 1
-                    </span>
-                  </div>
-                  <div class="bg-black/40 rounded-2xl border border-white/5 p-3">
-                    <div class="flex items-end gap-0.5 h-12">
-                      <%= for {count, pct} <- histogram(@entities, :curiosity) do %>
-                        <div
-                          class="flex-1 bg-cyan-500/70 rounded-t-sm"
-                          style={"height: #{max(pct, 4)}%"}
-                          title={"#{count}"}
-                        >
-                        </div>
-                      <% end %>
-                    </div>
-                    <span class="text-[7px] font-bold text-cyan-400/80 uppercase block mt-1.5">
-                      Curiosity 0 → 1
-                    </span>
-                  </div>
-                </div>
-              </div>
-              <!-- Generation distribution -->
-              <div>
-                <span class="text-[8px] uppercase tracking-widest text-slate-500 font-bold block mb-1.5">
-                  Generations Alive
-                </span>
-                <div class="bg-black/40 rounded-2xl border border-white/5 p-3">
-                  <div class="flex items-end gap-1 h-12">
-                    <%= for {gen, count, pct} <- generation_histogram(@entities) do %>
-                      <div class="flex-1 flex flex-col items-center gap-0.5" title={"#{count} minds"}>
-                        <div class="w-full flex items-end h-9">
-                          <div
-                            class="w-full bg-purple-500/70 rounded-t-sm"
-                            style={"height: #{max(pct, 6)}%"}
-                          >
-                          </div>
-                        </div>
-                        <span class="text-[7px] font-mono text-purple-400/70">{gen}</span>
-                      </div>
-                    <% end %>
-                    <%= if @entities == [] do %>
-                      <span class="text-[8px] font-bold text-slate-600 uppercase tracking-widest mx-auto self-center">
-                        Empty world
-                      </span>
-                    <% end %>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-          <!-- Top Connections -->
-          <div class="bg-slate-900/40 backdrop-blur-3xl border border-white/10 rounded-[2rem] p-6">
-            <h3 class="text-xs font-black text-white uppercase tracking-[0.3em] mb-6">
-              Social Graph
-            </h3>
-            <div class="space-y-4">
-              <%= for {pair, count} <- @top_interactions do %>
-                <div class="flex items-center justify-between bg-black/40 p-3 rounded-2xl border border-white/5">
-                  <div class="flex items-center gap-2">
-                    <span class="text-[9px] font-mono font-bold text-cyan-400">
-                      {String.slice(Enum.at(pair, 0), 0, 4)}
-                    </span>
-                    <div class="w-3 h-[1px] bg-slate-700"></div>
-                    <span class="text-[9px] font-mono font-bold text-cyan-400">
-                      {String.slice(Enum.at(pair, 1), 0, 4)}
-                    </span>
-                  </div>
-                  <div class="flex items-center gap-1.5">
-                    <span class="text-[10px] font-black text-slate-300">{count}</span>
-                    <span class="text-[7px] font-bold text-slate-500 uppercase">msgr</span>
-                  </div>
-                </div>
-              <% end %>
-              <%= if Enum.empty?(@top_interactions) do %>
-                <div class="py-4 text-center opacity-20">
-                  <p class="text-[9px] font-bold text-slate-500 uppercase tracking-[0.2em]">
-                    Silent World
-                  </p>
-                </div>
+                <p>This mind has died</p>
               <% end %>
             </div>
           </div>
-          <!-- Hall of Fame -->
-          <div class="bg-slate-900/40 backdrop-blur-3xl border border-white/10 rounded-[2rem] p-6">
-            <h3 class="text-xs font-black text-white uppercase tracking-[0.3em] mb-6">
-              Hall of Fame
-            </h3>
-            <div class="grid grid-cols-2 gap-3 mb-4">
-              <div class="bg-black/40 p-3 rounded-2xl border border-white/5">
-                <span class="text-[8px] text-slate-500 uppercase font-black block mb-1">
-                  Births
-                </span>
-                <span class="text-lg font-black text-emerald-400 tabular-nums">
-                  {@all_time.births}
-                </span>
-              </div>
-              <div class="bg-black/40 p-3 rounded-2xl border border-white/5">
-                <span class="text-[8px] text-slate-500 uppercase font-black block mb-1">
-                  Deaths
-                </span>
-                <span class="text-lg font-black text-rose-400 tabular-nums">
-                  {@all_time.deaths}
-                </span>
-                <span class="text-[8px] font-mono text-slate-600 block">
-                  {Map.get(@all_time.deaths_by_cause, :killed, 0)} killed
-                </span>
-              </div>
-              <div class="bg-black/40 p-3 rounded-2xl border border-white/5">
-                <span class="text-[8px] text-slate-500 uppercase font-black block mb-1">
-                  Mutations
-                </span>
-                <span class="text-lg font-black text-purple-400 tabular-nums">
-                  {@all_time.mutations}
-                </span>
-              </div>
-              <div class="bg-black/40 p-3 rounded-2xl border border-white/5">
-                <span class="text-[8px] text-slate-500 uppercase font-black block mb-1">
-                  Max Gen
-                </span>
-                <span class="text-lg font-black text-cyan-400 tabular-nums">
-                  {@all_time.max_generation}
-                </span>
-              </div>
-            </div>
-            <div class="space-y-2">
-              <%= if @all_time.oldest do %>
-                <div class="bg-black/40 p-3 rounded-2xl border border-white/5 flex items-center justify-between">
-                  <div>
-                    <span class="text-[8px] text-slate-500 uppercase font-black block mb-0.5">
-                      Oldest Mind Ever
-                    </span>
-                    <span class="text-[10px] font-bold text-amber-400">
-                      {@all_time.oldest[:name] || String.slice(@all_time.oldest.id || "?", 0, 8)}
-                    </span>
-                  </div>
-                  <span class="text-sm font-black text-amber-400 tabular-nums">
-                    {format_age(@all_time.oldest.age)}
-                  </span>
-                </div>
-              <% end %>
-              <%= if @all_time[:most_feared] do %>
-                <div class="bg-black/40 p-3 rounded-2xl border border-white/5 flex items-center justify-between">
-                  <div>
-                    <span class="text-[8px] text-slate-500 uppercase font-black block mb-0.5">
-                      Most Feared
-                    </span>
-                    <span class="text-[10px] font-bold text-rose-400">
-                      {@all_time.most_feared[:name] ||
-                        String.slice(@all_time.most_feared.id || "?", 0, 8)}
-                    </span>
-                  </div>
-                  <span class="text-sm font-black text-rose-400 tabular-nums">
-                    {@all_time.most_feared.kills} kills
-                  </span>
-                </div>
-              <% end %>
-              <%= if @all_time[:most_prolific] do %>
-                <div class="bg-black/40 p-3 rounded-2xl border border-white/5 flex items-center justify-between">
-                  <div>
-                    <span class="text-[8px] text-slate-500 uppercase font-black block mb-0.5">
-                      Most Prolific
-                    </span>
-                    <span class="text-[10px] font-bold text-emerald-400">
-                      {@all_time.most_prolific[:name] ||
-                        String.slice(@all_time.most_prolific.id || "?", 0, 8)}
-                    </span>
-                  </div>
-                  <span class="text-sm font-black text-emerald-400 tabular-nums">
-                    {@all_time.most_prolific.children} heirs
-                  </span>
-                </div>
-              <% end %>
-            </div>
-          </div>
-        </aside>
-      </main>
-
-      <%= if @show_about do %>
-        <div class="fixed inset-0 z-[70] flex items-center justify-center p-4">
-          <div class="absolute inset-0 bg-black/70 backdrop-blur-sm" phx-click="toggle_about"></div>
-          <div class="relative w-full max-w-2xl max-h-[85vh] overflow-y-auto custom-scrollbar bg-[#0b0d15] border border-white/10 rounded-[2rem] p-8">
-            <div class="flex items-start justify-between mb-6">
-              <h2 class="text-xl font-black text-white">
-                What is
-                <span class="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-indigo-500">
-                  Evolving Minds
-                </span>
-                ?
-              </h2>
-              <button
-                phx-click="toggle_about"
-                class="px-3 py-1.5 rounded-xl border border-white/10 bg-white/[0.02] hover:bg-white/10 text-slate-400 text-xs font-black"
-                aria-label="close"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div class="space-y-4 text-sm text-slate-400 leading-relaxed">
-              <p>
-                You are watching a
-                <strong class="text-slate-200">live artificial-life simulation</strong>
-                running on the Erlang virtual machine. Every card is an autonomous process — a
-                digital mind with two inherited traits,
-                <span class="text-orange-400">aggression</span>
-                and <span class="text-cyan-400">curiosity</span>, that decide how it treats others.
-              </p>
-              <p>
-                Minds act on their own timers: they greet or attack whoever they meet, and every
-                interaction settles in <strong class="text-slate-200">energy</strong>. Robbing a
-                fleeing pacifist pays; picking a fight with another warrior bleeds both sides;
-                sharing knowledge between curious minds compounds for everyone. Run out of energy
-                and you die — of exhaustion, or by someone's hand.
-              </p>
-              <p>
-                The fittest minds reproduce: parents are drawn proportionally to their energy, and
-                children inherit slightly mutated traits. Add shifting epochs of
-                <span class="text-emerald-400">abundance</span>
-                and <span class="text-rose-400">famine</span>, and what you get is real,
-                frequency-dependent natural selection — watch the trait averages drift in the
-                sidebar as strategies win and lose.
-              </p>
-              <p>
-                The world is <strong class="text-slate-200">persistent</strong>: it survives
-                restarts and deploys, and the Hall of Fame remembers every generation. Click
-                <em>Details</em>
-                on any card to read a mind's memories and the heuristic it is
-                currently running.
-              </p>
-              <p class="text-[11px] text-slate-600 pt-2 border-t border-white/5">
-                Built with Elixir, Phoenix LiveView, and the BEAM — every mind is a supervised
-                GenServer process. No JavaScript frameworks, no runtime code evaluation.
-              </p>
-            </div>
-          </div>
-        </div>
-      <% end %>
-
-      <%= if @selected_id do %>
-        <div class="fixed inset-0 z-[60] flex justify-end">
-          <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" phx-click="close_entity"></div>
-          <aside
-            id="entity-detail"
-            class="relative w-full max-w-md h-full bg-[#0b0d15] border-l border-white/10 p-6 overflow-y-auto custom-scrollbar"
-          >
-            <div class="flex items-start justify-between mb-6">
+        </section>
+        <div class="world-layout">
+          <section id="explore" class="explore" aria-labelledby="explore-heading">
+            <div class="section-heading explore-heading">
               <div>
-                <h2 class="text-[9px] font-bold text-slate-500 uppercase tracking-[0.3em] mb-1">
-                  Mind Dossier
+                <p class="eyebrow">MEET THE POPULATION</p><h2 id="explore-heading">
+                  Life, in real time<span class="count-badge">{@visible_count}</span>
                 </h2>
-                <p class="text-white font-black text-xl tracking-tight">
-                  {(@selected && Map.get(@selected, :name)) || String.slice(@selected_id, 0, 16)}
-                </p>
-                <p class="text-[9px] font-mono text-slate-600">
-                  {@selected_id}
-                  <%= if @selected && Map.get(@selected, :tribe) do %>
-                    <span class={"font-black uppercase #{tribe_class(@selected.tribe)}"}>
-                      · {@selected.tribe}
-                    </span>
-                  <% end %>
-                </p>
+              </div><div class="explore-actions">
+                <button
+                  class="button button-quiet"
+                  phx-click="toggle_observation"
+                  aria-pressed={to_string(@observation_paused)}
+                >{if @observation_paused, do: "▶ Resume view", else: "Ⅱ Pause view"}</button><button
+                  :if={@public_controls}
+                  class="button button-primary"
+                  phx-click="spawn_mind"
+                >+ Spawn a Mind</button>
+              </div>
+            </div>
+            <p :if={@observation_paused} class="notice" role="status">
+              Observation paused. The shared world continues evolving. Resume to catch up.
+            </p>
+            <div class="explore-toolbar">
+              <div class="view-tabs" role="group" aria-label="Observation view">
+                <button
+                  :for={
+                    {label, view} <- [{"Minds", "grid"}, {"Trait map", "map"}, {"Leaders", "leaders"}]
+                  }
+                  phx-click="set_view"
+                  phx-value-view={view}
+                  class={if @view == view, do: "active"}
+                  aria-pressed={to_string(@view == view)}
+                >{label}</button>
               </div>
               <button
-                phx-click="close_entity"
-                class="px-3 py-1.5 rounded-xl border border-white/10 bg-white/[0.02] hover:bg-white/10 text-slate-400 text-xs font-black"
-                aria-label="close"
-              >
-                ✕
-              </button>
+                class={"watch-filter #{if @only_watched, do: "active"}"}
+                phx-click="only_watched"
+                aria-pressed={to_string(@only_watched)}
+              >☆ Watchlist <span>{length(@watched)}</span></button>
             </div>
-
-            <%= if @selected do %>
-              <div class="grid grid-cols-2 gap-3 mb-6">
-                <div class="bg-black/40 p-3 rounded-2xl border border-white/5">
-                  <span class="text-[8px] text-slate-500 uppercase font-black block mb-1">Gen</span>
-                  <span class="text-lg font-black text-purple-400 tabular-nums">
-                    {@selected.generation}
-                  </span>
-                </div>
-                <div class="bg-black/40 p-3 rounded-2xl border border-white/5">
-                  <span class="text-[8px] text-slate-500 uppercase font-black block mb-1">Age</span>
-                  <span class="text-lg font-black text-amber-400 tabular-nums">
-                    {format_age(@selected.age)}
-                  </span>
-                </div>
-                <div class="bg-black/40 p-3 rounded-2xl border border-white/5">
-                  <span class="text-[8px] text-slate-500 uppercase font-black block mb-1">
-                    Energy
-                  </span>
-                  <span class="text-lg font-black text-cyan-400 tabular-nums">
-                    {@selected.energy}%
-                  </span>
-                </div>
-                <div class="bg-black/40 p-3 rounded-2xl border border-white/5">
-                  <span class="text-[8px] text-slate-500 uppercase font-black block mb-1">
-                    Kills
-                  </span>
-                  <span class="text-lg font-black text-rose-400 tabular-nums">
-                    {Map.get(@selected, :kills, 0)}
-                  </span>
-                </div>
+            <form
+              id="filter-form"
+              phx-change="filter_entities"
+              phx-submit="filter_entities"
+              class="filter-form"
+            >
+              <div class="search-field">
+                <label class="sr-only" for="mind-search">Search by name or entity ID</label><input
+                  id="mind-search"
+                  type="search"
+                  name="filters[query]"
+                  value={@filters.query}
+                  placeholder="Search name or entity ID"
+                  maxlength="100"
+                  phx-debounce="250"
+                />
               </div>
-
-              <div class="bg-black/40 p-3 rounded-2xl border border-white/5 mb-6">
-                <span class="text-[8px] text-slate-500 uppercase font-black block mb-1">
-                  Lineage
-                </span>
-                <%= if @selected.ancestors == [] do %>
-                  <span class="text-[11px] font-mono text-slate-300">
-                    First of its line — primordial spawn
-                  </span>
-                <% else %>
-                  <div class="flex flex-wrap items-center gap-1.5 text-[11px] font-mono">
-                    <span class="text-slate-200 font-bold">{Map.get(@selected, :name, "?")}</span>
-                    <%= for ancestor <- @selected.ancestors do %>
-                      <span class="text-slate-600">←</span>
-                      <span class={
-                        if ancestor.died_at, do: "text-slate-500", else: "text-emerald-400"
-                      }>
-                        {ancestor.name || String.slice(ancestor.id, 0, 8)}
-                      </span>
-                    <% end %>
-                  </div>
-                <% end %>
-                <.link
-                  navigate={~p"/tree"}
-                  class="text-[9px] font-black text-cyan-500/70 uppercase tracking-widest hover:text-cyan-400 inline-block mt-2"
-                >
-                  View full genealogy →
-                </.link>
-              </div>
-
-              <div class="mb-6">
-                <h3 class="text-[9px] uppercase tracking-widest text-cyan-400/80 font-black mb-2">
-                  Traits
-                </h3>
-                <div class="space-y-2">
-                  <div class="flex items-center gap-3">
-                    <span class="text-[9px] font-bold text-slate-500 uppercase w-20">Aggression</span>
-                    <div class="flex-1 h-1.5 bg-black/40 rounded-full overflow-hidden">
-                      <div
-                        class="h-full bg-orange-500"
-                        style={"width: #{@selected.traits.aggression * 100}%"}
-                      >
-                      </div>
-                    </div>
-                    <span class="text-[10px] font-mono font-bold text-orange-400">
-                      {Float.round(@selected.traits.aggression, 2)}
-                    </span>
-                  </div>
-                  <div class="flex items-center gap-3">
-                    <span class="text-[9px] font-bold text-slate-500 uppercase w-20">Curiosity</span>
-                    <div class="flex-1 h-1.5 bg-black/40 rounded-full overflow-hidden">
-                      <div
-                        class="h-full bg-cyan-500"
-                        style={"width: #{@selected.traits.curiosity * 100}%"}
-                      >
-                      </div>
-                    </div>
-                    <span class="text-[10px] font-mono font-bold text-cyan-400">
-                      {Float.round(@selected.traits.curiosity, 2)}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              <div class="mb-6">
-                <h3 class="text-[9px] uppercase tracking-widest text-cyan-400/80 font-black mb-2">
-                  Active Heuristic
-                </h3>
-                <pre class="text-[10px] leading-relaxed bg-[#05060a] border border-white/[0.05] p-3 rounded-xl text-cyan-100/50 font-mono overflow-x-auto custom-scrollbar">{@selected.behavior_source}</pre>
-              </div>
-
               <div>
-                <h3 class="text-[9px] uppercase tracking-widest text-cyan-400/80 font-black mb-2">
-                  Memory Stream ({length(@selected.memories)})
-                </h3>
-                <div class="space-y-1.5">
-                  <%= for {type, sender} <- Enum.take(@selected.memories, 30) do %>
-                    <div class="flex items-center justify-between bg-white/[0.02] p-2 rounded-lg border border-white/5">
-                      <span class="text-[9px] font-bold text-slate-400 uppercase">{type}</span>
-                      <span class="text-[8px] font-mono text-slate-600">
-                        ← {String.slice(sender, 0, 8)}
-                      </span>
+                <label class="sr-only" for="tribe-filter">Tribe</label><select
+                  id="tribe-filter"
+                  name="filters[tribe]"
+                ><option
+                  :for={
+                    {value, label} <- [
+                      {"all", "All tribes"},
+                      {"solari", "Solari"},
+                      {"umbra", "Umbra"}
+                    ]
+                  }
+                  value={value}
+                  selected={@filters.tribe == value}
+                >
+                  {label}
+                </option></select>
+              </div>
+              <div>
+                <label class="sr-only" for="status-filter">Condition</label><select
+                  id="status-filter"
+                  name="filters[status]"
+                ><option
+                  :for={
+                    {value, label} <- [
+                      {"all", "All conditions"},
+                      {"thriving", "Thriving · ≥75%"},
+                      {"critical", "Critical · ≤25%"},
+                      {"descendants", "Descendants"}
+                    ]
+                  }
+                  value={value}
+                  selected={@filters.status == value}
+                >
+                  {label}
+                </option></select>
+              </div>
+              <div>
+                <label class="sr-only" for="sort-filter">Sort minds</label><select
+                  id="sort-filter"
+                  name="filters[sort]"
+                ><option
+                  :for={
+                    {value, label} <- [
+                      {"energy_desc", "Energy high"},
+                      {"energy_asc", "Energy low"},
+                      {"aggression_desc", "Aggression"},
+                      {"curiosity_desc", "Curiosity"},
+                      {"generation_desc", "Generation"},
+                      {"oldest", "Oldest first"}
+                    ]
+                  }
+                  value={value}
+                  selected={@filters.sort == value}
+                >
+                  {label}
+                </option></select>
+              </div>
+            </form>
+            <div class="results-label">
+              <span>Visible {@visible_count} of {@total_population} minds</span><button
+                class="text-button"
+                phx-click="clear_filters"
+              >Reset filters</button>
+            </div>
+            <div
+              id="entities-grid"
+              phx-update="stream"
+              class={"minds-grid #{if @view != "grid", do: "hidden"}"}
+            >
+              <article
+                :for={{dom_id, entity} <- @streams.entities}
+                id={dom_id}
+                class={"mind-card tribe-#{entity.tribe} #{if entity.watched, do: "is-watched"}"}
+              >
+                <div class="card-top">
+                  <div class={"mind-avatar #{entity.tribe}"} aria-hidden="true">
+                    {String.first(entity.name || "?")}
+                  </div><div class="mind-identity">
+                    <h3>
+                      <.link patch={~p"/?#{[mind: entity.id]}"}>{entity.name || "Unnamed"}</.link>
+                    </h3><span class={"tribe-label #{entity.tribe}"}>{entity.tribe}
+                    <span>· Gen {entity.generation}</span></span>
+                  </div><button
+                    class={"star-button #{if entity.watched, do: "active"}"}
+                    phx-click="toggle_watch"
+                    phx-value-id={entity.id}
+                    aria-label={"#{if entity.watched, do: "Unwatch", else: "Watch"} #{entity.name}"}
+                    aria-pressed={to_string(entity.watched)}
+                  >{if entity.watched, do: "★", else: "☆"}</button>
+                </div>
+                <div class="mind-caption">
+                  <span>{Observatory.personality(entity.traits)}</span><code>{String.slice(
+                    entity.id,
+                    0,
+                    8
+                  )}</code>
+                </div>
+                <div class="energy-label">
+                  <span><i class={if entity.energy <= 25, do: "critical-dot", else: "alive-dot"}></i>Vitality</span><strong class={
+                    if entity.energy <= 25, do: "danger"
+                  }>{entity.energy}%</strong>
+                </div><meter
+                  class={"energy-meter #{if entity.energy <= 25, do: "is-critical"}"}
+                  min="0"
+                  max="100"
+                  value={entity.energy}
+                  aria-label={"#{entity.name} energy"}
+                >{entity.energy}%</meter>
+                <div class="trait-pair">
+                  <div>
+                    <span>Aggression</span><strong class="warm">{pct(entity.traits.aggression)}<small>%</small></strong><div class="trait-track">
+                      <span class="aggression" style={"width: #{pct(entity.traits.aggression)}%"}></span>
                     </div>
-                  <% end %>
-                  <%= if Enum.empty?(@selected.memories) do %>
-                    <p class="text-[9px] text-slate-600 uppercase tracking-widest py-2">
-                      No memories yet
-                    </p>
+                  </div><div>
+                    <span>Curiosity</span><strong class="cool">{pct(entity.traits.curiosity)}<small>%</small></strong><div class="trait-track">
+                      <span class="curiosity" style={"width: #{pct(entity.traits.curiosity)}%"}></span>
+                    </div>
+                  </div>
+                </div>
+                <div class="recent-memory">
+                  <%= if entity.memories == [] do %>
+                    <span>A new story is beginning.</span>
+                  <% else %>
+                    <% {type, sender} = hd(entity.memories) %><span class={
+                      if type == :attack, do: "warm", else: "cool"
+                    }>{type}</span><span>← {String.slice(sender, 0, 6)}</span>
                   <% end %>
                 </div>
+                <div class="card-actions">
+                  <button class="text-button" phx-click="select_entity" phx-value-id={entity.id}>Details
+                  <span aria-hidden="true">↗</span></button><button
+                    class={"compare-button #{if entity.compared, do: "active"}"}
+                    phx-click="toggle_compare"
+                    phx-value-id={entity.id}
+                    aria-pressed={to_string(entity.compared)}
+                  >{if entity.compared, do: "✓ Comparing", else: "+ Compare"}</button><button
+                    :if={@public_controls}
+                    class="energy-button"
+                    phx-click="inject_energy"
+                    phx-value-id={entity.id}
+                    aria-label={"Give #{entity.name} 20 energy"}
+                  >+ Energy</button>
+                </div>
+              </article>
+            </div>
+            <div :if={@view == "map"} class="panel trait-map-panel">
+              <div class="section-heading">
+                <h3>A world of personalities</h3><span>Tap a mind to explore</span>
+              </div><div
+                class="trait-map"
+                role="group"
+                aria-label="Interactive map: aggression increases rightward, curiosity upward"
+              >
+                <span class="map-quadrant q1">CURIOUS DIPLOMATS</span><span class="map-quadrant q2">CURIOUS WARRIORS</span><span class="map-quadrant q3">QUIET OBSERVERS</span><span class="map-quadrant q4">BOLD COMPETITORS</span><button
+                  :for={e <- @visible_entities}
+                  class={"map-mind #{e.tribe}"}
+                  style={"left: #{5 + pct(e.traits.aggression) * 0.9}%; bottom: #{5 + pct(e.traits.curiosity) * 0.9}%"}
+                  phx-click="select_entity"
+                  phx-value-id={e.id}
+                  title={"#{e.name}: #{pct(e.traits.aggression)}% aggression, #{pct(e.traits.curiosity)}% curiosity"}
+                  aria-label={"Open #{e.name}: #{pct(e.traits.aggression)}% aggression, #{pct(e.traits.curiosity)}% curiosity"}
+                ><span></span></button>
+              </div><div class="map-axis"><span>↑ Curiosity</span><span>Aggression →</span></div><p class="muted">
+                Each dot is a living mind. Solari are gold; Umbra are violet. Positions change as traits mutate.
+              </p>
+            </div>
+            <div :if={@view == "leaders"} class="leaderboards">
+              <section
+                :for={
+                  {title, field} <- [
+                    {"Most energetic", :energy},
+                    {"Most curious", :curiosity},
+                    {"Furthest descendants", :generation}
+                  ]
+                }
+                class="panel"
+              >
+                <h3>{title}</h3><ol class="ranking">
+                  <li :for={
+                    {e, index} <-
+                      @visible_entities
+                      |> Enum.sort_by(
+                        &if(field == :curiosity, do: &1.traits.curiosity, else: Map.fetch!(&1, field)),
+                        :desc
+                      )
+                      |> Enum.take(5)
+                      |> Enum.with_index(1)
+                  }>
+                    <span class="rank">{index}</span><.link patch={~p"/?#{[mind: e.id]}"}>{e.name}<small class={
+                      to_string(e.tribe)
+                    }>{e.tribe}</small></.link><strong>{if field == :curiosity,
+                      do: "#{pct(e.traits.curiosity)}%",
+                      else: Map.fetch!(e, field)}</strong>
+                  </li>
+                </ol>
+              </section>
+            </div>
+            <div :if={@visible_count == 0} class="empty-state">
+              <span aria-hidden="true">◎</span><h3>No entities match</h3><p>
+                Try another name, reset your filters, or wait for a new generation.
+              </p><button class="button button-quiet" phx-click="clear_filters">Show all minds</button>
+            </div>
+            <section :if={@watched != []} class="panel watchlist-panel">
+              <div class="section-heading">
+                <h3>Your watchlist</h3><button class="text-button" phx-click="clear_watchlist">Clear watchlist</button>
+              </div><p class="muted">
+                Saved in this browser. Follow a story, even after a mind is gone.
+              </p><div class="watchlist-items">
+                <div :for={id <- @watched}>
+                  <% mind = lookup(@entities, id) %><.link patch={~p"/?#{[mind: id]}"}>{mind.name ||
+                    String.slice(id, 0, 8)}<small>{if Enum.any?(@entities, &(&1.id == id)),
+                    do: "Alive",
+                    else: "No longer living"}</small></.link><button
+                    phx-click="toggle_watch"
+                    phx-value-id={id}
+                    aria-label={"Unwatch #{mind.name}"}
+                  >×</button>
+                </div>
               </div>
-            <% else %>
-              <div class="bg-rose-500/10 border border-rose-500/30 rounded-2xl p-6 text-center">
-                <p class="text-xs font-black uppercase tracking-[0.3em] text-rose-400 mb-2">
-                  This mind has died
-                </p>
-                <p class="text-[11px] text-slate-500">
-                  Its state and memories have been purged from the world.
+            </section>
+          </section>
+          <aside class="world-sidebar" aria-label="World stories and trends">
+            <section class="panel events-panel">
+              <div class="section-heading">
+                <h2>World journal</h2><span class="live-label">Global Events</span>
+              </div><label class="sr-only" for="event-type">Filter journal events</label><form
+                id="event-filter-form"
+                phx-change="filter_events"
+              >
+                <select id="event-type" name="type"><option
+                  :for={
+                    {value, label} <- [
+                      {"all", "All stories"},
+                      {"reproduction", "New generations"},
+                      {"death", "Deaths"},
+                      {"mutation", "Mutations"},
+                      {"epoch_change", "Epoch changes"},
+                      {"birth", "New arrivals"}
+                    ]
+                  }
+                  value={value}
+                  selected={@event_filter == value}
+                >
+                  {label}
+                </option></select>
+              </form><div class="journal-list">
+                <article
+                  :for={event <- filtered_events(@global_events, @event_filter)}
+                  class={"journal-entry event-#{event.type}"}
+                >
+                  <div>
+                    <span>{String.replace(to_string(event.type), "_", " ")}</span><time datetime={
+                      DateTime.to_iso8601(event.timestamp)
+                    }>{Calendar.strftime(event.timestamp, "%H:%M:%S")} UTC</time>
+                  </div><p>{event_sentence(event)}</p>
+                </article><p :if={filtered_events(@global_events, @event_filter) == []} class="muted">
+                  No stories in this category yet. Keep watching.
                 </p>
               </div>
-            <% end %>
+            </section>
+            <section class="panel trends-panel">
+              <div class="section-heading">
+                <h2>Evolution Trends</h2><span>last 100 seconds</span>
+              </div><p class="chart-label">Trait Distribution · average over time</p><svg
+                viewBox="0 0 100 100"
+                preserveAspectRatio="none"
+                class="trend-chart"
+                role="img"
+                aria-label="Aggression and curiosity averages over recent samples"
+              ><line x1="0" y1="50" x2="100" y2="50" stroke="currentColor" stroke-dasharray="2 3" /><polyline
+                points={line_points(@stats, :avg_aggression)}
+                fill="none"
+                stroke="#f3a66b"
+                stroke-width="2"
+                vector-effect="non-scaling-stroke"
+              /><polyline
+                points={line_points(@stats, :avg_curiosity)}
+                fill="none"
+                stroke="#75d9c5"
+                stroke-width="2"
+                vector-effect="non-scaling-stroke"
+              /></svg><div class="chart-legend">
+                <span class="warm">● Aggression</span><span class="cool">● Curiosity</span>
+              </div><p :if={@stats == []} class="muted">Collecting the first samples…</p><p class="chart-label">
+                Population
+              </p><svg
+                viewBox="0 0 100 100"
+                preserveAspectRatio="none"
+                class="population-chart"
+                role="img"
+                aria-label="Population over recent samples"
+              ><polyline
+                points={line_points(@stats, :population)}
+                fill="none"
+                stroke="#75d9c5"
+                stroke-width="2"
+                vector-effect="non-scaling-stroke"
+              /></svg>
+            </section>
+            <section class="panel records-panel">
+              <div class="section-heading">
+                <h2>Hall of Fame</h2><span>all time</span>
+              </div><dl class="record-counters">
+                <div>
+                  <dt>Births</dt><dd>{@all_time.births}</dd>
+                </div><div>
+                  <dt>Deaths</dt><dd>{@all_time.deaths}</dd>
+                </div><div>
+                  <dt>Mutations</dt><dd>{@all_time.mutations}</dd>
+                </div><div>
+                  <dt>Max generation</dt><dd>{@all_time.max_generation}</dd>
+                </div>
+              </dl><div
+                :for={
+                  {label, record, field} <- [
+                    {"Oldest mind", @all_time.oldest, :age},
+                    {"Most feared", @all_time.most_feared, :kills},
+                    {"Most prolific", @all_time.most_prolific, :children}
+                  ]
+                }
+                :if={record}
+                class="record-holder"
+              >
+                <span>{label}<.link patch={~p"/?#{[mind: record.id]}"}>{record[:name] ||
+                  String.slice(record.id, 0, 8)}</.link></span><strong>{if field == :age,
+                  do: format_age(record[field]),
+                  else: record[field]}</strong>
+              </div>
+            </section>
+            <section class="field-note">
+              <p class="eyebrow">A NOTE FROM THE FIELD</p><h3>
+                Small choices.<br />Generations of consequences.
+              </h3><p>
+                Energy keeps a mind alive. Traits shape its choices. Its descendants carry a little of both.
+              </p><button class="text-button" phx-click="toggle_about">Learn how this world works ↗</button>
+            </section>
           </aside>
         </div>
-      <% end %>
-
-      <style>
-        .custom-scrollbar::-webkit-scrollbar {
-          width: 2px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-track {
-          background: transparent;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-          background: rgba(255, 255, 255, 0.05);
-          border-radius: 10px;
-        }
-        .custom-scrollbar-none::-webkit-scrollbar {
-          display: none;
-        }
-      </style>
+        <footer class="site-footer">
+          <span>EVOLVING MINDS <span>· A persistent experiment in artificial life</span></span><div>
+            <a href="/api/world" download="evolving-minds.json">Export world JSON ↗</a><.link navigate={
+              ~p"/tree"
+            }>Explore dynasties ↗</.link>
+          </div>
+        </footer>
+      </main>
+      <div
+        :if={@show_about}
+        class="dialog-backdrop"
+        id="field-guide-dialog"
+        phx-hook="Dialog"
+        data-close-event="toggle_about"
+      >
+        <button class="dialog-overlay" phx-click="toggle_about" aria-label="Close field guide"></button><section
+          class="guide-dialog"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="guide-title"
+          tabindex="-1"
+        >
+          <div class="section-heading">
+            <p class="eyebrow">YOUR FIELD GUIDE</p><button
+              class="close-button"
+              phx-click="toggle_about"
+              aria-label="Close field guide"
+            >×</button>
+          </div><h2 id="guide-title">Welcome to a living world.</h2><p>
+            You are watching a <strong>live artificial-life simulation</strong>. Every mind is an autonomous process with inherited aggression and curiosity. This is procedural behavior, not a language model.
+          </p><ol class="guide-steps">
+            <li>
+              <strong>Observe.</strong>
+              Open Details to read memories, lineage, and the Active Heuristic. The trait map reveals personality clusters.
+            </li><li>
+              <strong>Follow.</strong>
+              Star up to 12 minds in your browser. Compare three side by side, or pause your view to look more closely.
+            </li><li>
+              <strong>Understand.</strong>
+              Every interaction settles in energy. Robbing a fleeing pacifist pays; wars drain both sides; cooperation can reward both minds.
+            </li><li>
+              <strong>Watch evolution.</strong>
+              Parents are chosen in proportion to energy. Children inherit jittered traits: frequency-dependent selection shapes each generation.
+            </li>
+          </ol><p>
+            Abundance costs 3 energy per action, normal costs 5, famine costs 8. Members of the same tribe initiate greetings. Responses still depend on personality.
+          </p><p>
+            The world survives restarts. Watchlist data stays in this browser; clearing browser storage removes it. Pausing your view never pauses the shared simulation.
+          </p><p :if={@public_controls} class="notice">
+            Visitor controls: +20 energy, up to five injections per 10 seconds; two spawns per minute. Limits are shared across tabs. The world holds up to 50 minds.
+          </p><button class="button button-primary" phx-click="toggle_about">Start exploring →</button>
+        </section>
+      </div>
+      <div
+        :if={@selected_id}
+        class="dialog-backdrop dossier-backdrop"
+        id="dossier-dialog"
+        phx-hook="Dialog"
+        data-close-event="close_entity"
+      >
+        <button class="dialog-overlay" phx-click="close_entity" aria-label="Close mind dossier"></button><aside
+          id="entity-detail"
+          class="dossier-dialog"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="dossier-title"
+          tabindex="-1"
+        >
+          <div class="section-heading">
+            <p class="eyebrow">Mind Dossier</p><button
+              class="close-button"
+              phx-click="close_entity"
+              aria-label="Close mind dossier"
+            >×</button>
+          </div><h2 id="dossier-title">
+            {if @selected, do: @selected.name, else: String.slice(@selected_id, 0, 16)}
+          </h2><code class="dossier-id">{@selected_id}</code><div class="dossier-actions">
+            <button class="button button-quiet" phx-click="toggle_watch" phx-value-id={@selected_id}>{if @selected_id in @watched,
+              do: "★ Watching",
+              else: "☆ Watch mind"}</button><button
+              id="copy-mind-link"
+              phx-hook="CopyLink"
+              class="button button-quiet"
+            >Copy link ↗</button>
+          </div>
+          <%= if @selected && @selected.alive do %>
+            <dl class="dossier-stats">
+              <div>
+                <dt>Generation</dt><dd>{@selected.generation}</dd>
+              </div><div>
+                <dt>Age</dt><dd>{format_age(@selected.age)}</dd>
+              </div><div>
+                <dt>Energy</dt><dd>{@selected.energy}%</dd>
+              </div><div>
+                <dt>Kills</dt><dd>{@selected.kills}</dd>
+              </div>
+            </dl><h3>Traits · {Observatory.personality(@selected.traits)}</h3><p class="trait-detail">
+              <span>Aggression <strong class="warm">{pct(@selected.traits.aggression)}%</strong></span><span>Curiosity
+              <strong class="cool">{pct(@selected.traits.curiosity)}%</strong></span>
+            </p><h3>Lineage</h3><p :if={@selected.ancestors == []} class="muted">
+              First of its line — primordial spawn
+            </p><div class="lineage-list">
+              <.link :for={ancestor <- @selected.ancestors} patch={~p"/?#{[mind: ancestor.id]}"}>{ancestor.name ||
+                String.slice(ancestor.id, 0, 8)} <span>· Gen {ancestor.generation}</span></.link>
+            </div><.link navigate={~p"/tree"} class="text-button">View full genealogy →</.link><details
+              class="heuristic"
+              open
+            >
+              <summary>Active Heuristic</summary><pre>{@selected.behavior_source}</pre>
+            </details><h3>Memory Stream ({length(@selected.memories)})</h3><div class="memory-list">
+              <div :for={{type, sender} <- Enum.take(@selected.memories, 30)}>
+                <span>{type}</span><.link patch={~p"/?#{[mind: sender]}"}>← {String.slice(
+                  sender,
+                  0,
+                  8
+                )}</.link>
+              </div><p :if={@selected.memories == []} class="muted">
+                No memories yet. A new story is beginning.
+              </p>
+            </div>
+          <% else %>
+            <div class="notice">
+              <h3>This mind has died</h3><p>
+                Its state and memories have been purged from the world. Its story may still live in the ancestry book.
+              </p><p :if={@selected}>
+                Generation {@selected.generation} · Lived {format_age(@selected.age)} · {@selected.cause ||
+                  "record unavailable"}
+              </p>
+            </div><.link navigate={~p"/tree"} class="text-button">Explore the ancestry book →</.link>
+          <% end %>
+        </aside>
+      </div>
     </div>
     """
   end

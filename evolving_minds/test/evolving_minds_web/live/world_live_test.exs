@@ -28,8 +28,8 @@ defmodule EvolvingMindsWeb.WorldLiveTest do
     response = html_response(conn, 200)
 
     assert response =~ "Evolving"
-    assert response =~ "Autonomous Heuristic Simulator"
-    assert response =~ "Filter entity ID"
+    assert response =~ "AUTONOMOUS HEURISTIC SIMULATOR"
+    assert response =~ "Search name or entity ID"
     assert response =~ "Energy high"
     assert response =~ "Visible"
   end
@@ -275,7 +275,10 @@ defmodule EvolvingMindsWeb.WorldLiveTest do
     assert html =~ "A new mind awakens"
 
     assert eventually(fn ->
-             length(World.get_all_entities()) >= MapSet.size(before_ids) + 2
+             World.get_all_entities()
+             |> MapSet.new()
+             |> MapSet.difference(before_ids)
+             |> MapSet.size() >= 2
            end)
 
     # Third spawn inside the window hits the limit.

@@ -46,6 +46,7 @@ defmodule EvolvingMindsWeb.Router do
     pipe_through :api
 
     get "/healthz", HealthController, :show
+    get "/api/world", WorldController, :export
   end
 
   pipeline :admin do

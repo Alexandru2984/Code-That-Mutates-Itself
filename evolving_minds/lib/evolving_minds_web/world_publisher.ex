@@ -27,6 +27,22 @@ defmodule EvolvingMindsWeb.WorldPublisher do
     Phoenix.PubSub.subscribe(EvolvingMinds.PubSub, @topic)
   end
 
+  def current_snapshot do
+    case :ets.lookup(__MODULE__, :snapshot) do
+      [{:snapshot, snapshot, _at}] -> snapshot
+      [] -> snapshot()
+    end
+  end
+
+  def ready? do
+    case :ets.lookup(__MODULE__, :snapshot) do
+      [{:snapshot, _, at}] -> System.monotonic_time(:millisecond) - at < 15_000
+      _ -> false
+    end
+  rescue
+    ArgumentError -> false
+  end
+
   @doc """
   Builds the current world snapshot on demand (used for first render and
   for immediate feedback after user actions).
@@ -44,23 +60,27 @@ defmodule EvolvingMindsWeb.WorldPublisher do
         Map.new(entities, fn entity ->
           {entity.id, Enum.take(Memory.get_memories(entity.id), @memories_per_entity)}
         end),
-      global_events: GlobalEvents.get_recent_events(),
+      global_events: GlobalEvents.get_recent_events(30),
       stats: Stats.get_history(),
       top_interactions: Stats.get_top_interactions(),
       epoch: EvolvingMinds.Environment.current_epoch(),
-      all_time: EvolvingMinds.AllTimeStats.get_stats()
+      all_time: EvolvingMinds.AllTimeStats.get_stats() |> Map.drop([:kills_by, :children_by])
     }
   end
 
   @impl true
   def init(state) do
+    :ets.new(__MODULE__, [:named_table, :protected, read_concurrency: true])
+    :ets.insert(__MODULE__, {:snapshot, snapshot(), System.monotonic_time(:millisecond)})
     :timer.send_interval(@interval, :tick)
     {:ok, state}
   end
 
   @impl true
   def handle_info(:tick, state) do
-    Phoenix.PubSub.broadcast(EvolvingMinds.PubSub, @topic, {:world_update, snapshot()})
+    snapshot = snapshot()
+    :ets.insert(__MODULE__, {:snapshot, snapshot, System.monotonic_time(:millisecond)})
+    Phoenix.PubSub.broadcast(EvolvingMinds.PubSub, @topic, {:world_update, snapshot})
     {:noreply, state}
   end
 end

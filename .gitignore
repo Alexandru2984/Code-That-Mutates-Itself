@@ -23,8 +23,8 @@ evolving_minds-*.tar
 !.env.example
 
 # Phoenix static assets (generated)
-priv/static/assets/
-priv/static/cache_manifest.json
+**/priv/static/assets/
+**/priv/static/cache_manifest.json
 
 # Node.js
 npm-debug.log

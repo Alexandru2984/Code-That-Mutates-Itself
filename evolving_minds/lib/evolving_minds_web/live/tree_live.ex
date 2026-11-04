@@ -1,121 +1,265 @@
 defmodule EvolvingMindsWeb.TreeLive do
-  @moduledoc """
-  The genealogy of the world: every dynasty rendered as a nested tree
-  from the Ancestry book. Loaded on mount and on demand — not on every
-  world tick, since the whole forest re-renders.
-  """
-
   use EvolvingMindsWeb, :live_view
-
-  alias EvolvingMinds.Ancestry
+  alias EvolvingMinds.{Ancestry, World}
+  alias EvolvingMindsWeb.Observatory
+  @page_size 40
 
   @impl true
-  def mount(_params, _session, socket) do
-    {:ok, socket |> assign(:page_title, "Genealogy") |> load(),
-     layout: {EvolvingMindsWeb.Layouts, :screen}}
+  def mount(_params, session, socket) do
+    {:ok,
+     socket
+     |> assign(
+       page_title: "Dynasties & Genealogy",
+       query: "",
+       life: "all",
+       tribe: "all",
+       view: "recent",
+       page: 1,
+       visitor_key: session["visitor_key"]
+     )
+     |> load(), layout: {EvolvingMindsWeb.Layouts, :screen}}
   end
 
   @impl true
-  def handle_event("refresh", _params, socket) do
-    {:noreply, load(socket)}
+  def handle_event("refresh", _, socket) do
+    if EvolvingMindsWeb.RateLimiter.allow?(
+         {:tree_refresh, socket.assigns.visitor_key},
+         10,
+         10_000
+       ),
+       do: {:noreply, load(socket)},
+       else:
+         {:noreply, put_flash(socket, :error, "Please wait a moment before refreshing again.")}
   end
+
+  def handle_event("filter", %{"filters" => f}, socket) when is_map(f) do
+    socket =
+      assign(socket,
+        query: Observatory.text(f["query"], 100),
+        life: if(f["life"] in ["all", "alive", "dead"], do: f["life"], else: "all"),
+        tribe: if(f["tribe"] in ["all", "solari", "umbra"], do: f["tribe"], else: "all"),
+        page: 1
+      )
+
+    {:noreply, project(socket)}
+  end
+
+  def handle_event("view", %{"view" => view}, socket) when view in ["recent", "family"],
+    do: {:noreply, socket |> assign(view: view, page: 1) |> project()}
+
+  def handle_event("page", %{"direction" => direction}, socket)
+      when direction in ["next", "previous"] do
+    page = socket.assigns.page + if(direction == "next", do: 1, else: -1)
+    {:noreply, socket |> assign(:page, min(max(page, 1), socket.assigns.pages)) |> project()}
+  end
+
+  def handle_event(_, _, socket), do: {:noreply, socket}
 
   defp load(socket) do
     records = Ancestry.all()
-    ids = MapSet.new(records, & &1.id)
-
-    children_map =
-      records
-      |> Enum.filter(& &1.parent_id)
-      |> Enum.group_by(& &1.parent_id)
-
-    # Roots: primordial minds, plus orphans whose ancestors were pruned.
-    roots =
-      records
-      |> Enum.filter(fn record ->
-        is_nil(record.parent_id) or not MapSet.member?(ids, record.parent_id)
-      end)
-      |> Enum.sort_by(& &1.born_at)
+    living = MapSet.new(World.get_all_entities())
+    records = Enum.map(records, &Map.put(&1, :alive, MapSet.member?(living, &1.id)))
 
     socket
-    |> assign(:roots, roots)
-    |> assign(:children_map, children_map)
-    |> assign(:total, length(records))
-    |> assign(:alive, Enum.count(records, &is_nil(&1.died_at)))
+    |> assign(
+      records: records,
+      total: length(records),
+      alive: Enum.count(records, & &1.alive),
+      names: Map.new(records, &{&1.id, &1.name}),
+      refreshed_at: DateTime.utc_now()
+    )
+    |> project()
   end
 
-  defp name_class(%{died_at: died}) when died != nil, do: "text-slate-500"
-  defp name_class(%{tribe: :solari}), do: "text-amber-400"
-  defp name_class(%{tribe: :umbra}), do: "text-violet-400"
-  defp name_class(_record), do: "text-white"
+  defp project(socket) do
+    query = String.downcase(socket.assigns.query)
 
-  defp dynasty(assigns) do
-    ~H"""
-    <div class={if @depth > 0, do: "ml-3 pl-3 border-l border-white/5", else: ""}>
-      <div class="flex items-center gap-2 py-1">
-        <div class={"w-1.5 h-1.5 rounded-full shrink-0 #{if @record.died_at, do: "bg-slate-700", else: "bg-emerald-500"}"}>
-        </div>
-        <span class={"text-xs font-bold #{name_class(@record)}"}>
-          {@record.name || String.slice(@record.id, 0, 8)}
-        </span>
-        <span class="text-[8px] font-mono text-purple-400/70 uppercase">
-          gen {@record.generation}
-        </span>
-        <%= if @record.died_at do %>
-          <span class="text-[8px] font-mono text-rose-500/70">† {@record.cause}</span>
-        <% end %>
-      </div>
-      <%= for child <- Map.get(@children_map, @record.id, []) |> Enum.sort_by(& &1.born_at) do %>
-        <.dynasty record={child} children_map={@children_map} depth={@depth + 1} />
-      <% end %>
-    </div>
-    """
+    rows =
+      if socket.assigns.view == "family",
+        do: forest(socket.assigns.records),
+        else: socket.assigns.records |> Enum.sort_by(& &1.born_at, :desc) |> Enum.map(&{&1, 0})
+
+    rows =
+      Enum.filter(rows, fn {r, _} ->
+        (String.contains?(String.downcase(r.name || ""), query) or
+           String.contains?(String.downcase(r.id), query)) and
+          (socket.assigns.tribe == "all" or to_string(r.tribe) == socket.assigns.tribe) and
+          (socket.assigns.life == "all" or socket.assigns.life == "alive" == r.alive)
+      end)
+
+    pages = max(ceil(length(rows) / @page_size), 1)
+    page = min(socket.assigns.page, pages)
+
+    assign(socket,
+      rows: Enum.slice(rows, (page - 1) * @page_size, @page_size),
+      matches: length(rows),
+      pages: pages,
+      page: page
+    )
+  end
+
+  # A visited set and depth bound tolerate legacy/cyclic ancestry; pagination
+  # caps rendered rows, and indentation is capped separately for small screens.
+  defp forest(records) do
+    children = Enum.group_by(records, & &1.parent_id)
+    ids = MapSet.new(records, & &1.id)
+
+    roots =
+      records
+      |> Enum.filter(&(is_nil(&1.parent_id) or not MapSet.member?(ids, &1.parent_id)))
+      |> Enum.sort_by(& &1.born_at, :desc)
+
+    {rows, _seen} = walk(Enum.map(roots ++ records, &{&1, 0}), children, MapSet.new(), [])
+    Enum.reverse(rows)
+  end
+
+  defp walk([], _, seen, rows), do: {rows, seen}
+
+  defp walk([{record, depth} | rest], children, seen, rows) do
+    if MapSet.member?(seen, record.id) or depth > 64 do
+      walk(rest, children, seen, rows)
+    else
+      next =
+        Map.get(children, record.id, [])
+        |> Enum.sort_by(& &1.born_at)
+        |> Enum.map(&{&1, depth + 1})
+
+      walk(next ++ rest, children, MapSet.put(seen, record.id), [{record, depth} | rows])
+    end
   end
 
   @impl true
   def render(assigns) do
     ~H"""
-    <div class="min-h-screen w-full bg-[#050608] text-slate-300 font-sans p-6 md:p-10">
-      <div class="max-w-3xl mx-auto">
-        <header class="mb-8 flex items-center justify-between">
-          <div>
-            <h1 class="text-2xl font-black text-white">
-              The
-              <span class="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-indigo-500">
-                Dynasties
-              </span>
-            </h1>
-            <p class="text-[10px] text-slate-500 font-mono uppercase tracking-[0.3em] mt-1">
-              {@total} minds recorded · {@alive} alive
-            </p>
+    <div class="observatory">
+      <header class="site-header">
+        <a href="/" class="brand" aria-label="Evolving Minds home"><span
+          class="brand-mark"
+          aria-hidden="true"
+        >◎</span><span>Evolving <strong>Minds</strong><small>THE LIVING OBSERVATORY</small></span></a><nav aria-label="Main navigation">
+          <.link navigate={~p"/"}>Observatory</.link><.link navigate={~p"/tree"} class="nav-active">Dynasties</.link>
+        </nav><span class="connection-state"><i></i>Ancestry book</span>
+      </header>
+      <main id="main-content" class="observatory-main tree-main">
+        <section class="tree-intro">
+          <p class="eyebrow">EVERY LIFE LEAVES A TRACE</p><h1>The Dynasties</h1><p>
+            Meet the ancestors. Follow their descendants. Discover how a world remembers.
+          </p><div class="tree-totals">
+            <span><strong>{@total}</strong> minds recorded</span><span><strong>{@alive}</strong> alive</span><span><strong>{@total -
+              @alive}</strong>
+            past lives</span>
           </div>
-          <div class="flex gap-3">
-            <button
+        </section>
+        <section class="panel genealogy-panel" aria-labelledby="book-heading">
+          <div class="section-heading">
+            <h2 id="book-heading">The ancestry book</h2><button
+              class="button button-quiet"
               phx-click="refresh"
-              class="px-4 py-2 rounded-xl border border-white/10 bg-white/[0.02] hover:bg-white/10 text-[10px] font-black text-slate-400 uppercase tracking-widest"
-            >
-              Refresh
-            </button>
-            <a
-              href="/"
-              class="px-4 py-2 rounded-xl border border-white/10 bg-white/[0.02] hover:bg-white/10 text-[10px] font-black text-slate-400 uppercase tracking-widest"
-            >
-              ← World
-            </a>
+            >↻ Refresh</button>
+          </div><p class="muted">
+            Last refreshed {Calendar.strftime(@refreshed_at, "%H:%M:%S")} UTC. The book keeps up to 2,000 recent records; older ancestors may be pruned.
+          </p>
+          <div class="explore-toolbar">
+            <div class="view-tabs" role="group" aria-label="Genealogy view">
+              <button
+                phx-click="view"
+                phx-value-view="recent"
+                class={if @view == "recent", do: "active"}
+                aria-pressed={to_string(@view == "recent")}
+              >Recent lives</button><button
+                phx-click="view"
+                phx-value-view="family"
+                class={if @view == "family", do: "active"}
+                aria-pressed={to_string(@view == "family")}
+              >Family tree</button>
+            </div><span class="muted">{@matches} matches</span>
           </div>
-        </header>
-
-        <div class="bg-slate-900/40 border border-white/10 rounded-2xl p-6 space-y-4">
-          <%= for root <- @roots do %>
-            <.dynasty record={root} children_map={@children_map} depth={0} />
-          <% end %>
-          <%= if @roots == [] do %>
-            <p class="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em] text-center py-6">
-              The book is empty — the world is young.
-            </p>
-          <% end %>
-        </div>
-      </div>
+          <form id="tree-filter-form" phx-change="filter" phx-submit="filter" class="tree-filters">
+            <div>
+              <label class="sr-only" for="tree-search">Search ancestry by name or ID</label><input
+                id="tree-search"
+                type="search"
+                name="filters[query]"
+                value={@query}
+                maxlength="100"
+                placeholder="Search name or ID"
+                phx-debounce="250"
+              />
+            </div><div>
+              <label class="sr-only" for="tree-life">Life status</label><select
+                id="tree-life"
+                name="filters[life]"
+              ><option
+                :for={
+                  {v, label} <- [
+                    {"all", "All lives"},
+                    {"alive", "Living minds"},
+                    {"dead", "Past lives"}
+                  ]
+                }
+                value={v}
+                selected={@life == v}
+              >
+                {label}
+              </option></select>
+            </div><div>
+              <label class="sr-only" for="tree-tribe">Tribe</label><select
+                id="tree-tribe"
+                name="filters[tribe]"
+              ><option
+                :for={{v, label} <- [{"all", "All tribes"}, {"solari", "Solari"}, {"umbra", "Umbra"}]}
+                value={v}
+                selected={@tribe == v}
+              >
+                {label}
+              </option></select>
+            </div>
+          </form>
+          <div class="ancestry-rows">
+            <article
+              :for={{r, depth} <- @rows}
+              class={"ancestry-row #{if r.alive, do: "is-alive"}"}
+              style={"--depth: #{min(depth, 4)}"}
+            >
+              <span class={"ancestry-dot #{if r.alive, do: "alive-dot"}"} aria-hidden="true"></span><div class="ancestry-identity">
+                <h3>
+                  <.link navigate={~p"/?#{[mind: r.id]}"}>{r.name || String.slice(r.id, 0, 8)}</.link><span class={
+                    to_string(r.tribe)
+                  }>{r.tribe}</span>
+                </h3><p>
+                  <%= if r.parent_id do %>
+                    Child of
+                    <.link navigate={~p"/?#{[mind: r.parent_id]}"}>{@names[r.parent_id] ||
+                      String.slice(r.parent_id, 0, 8)}</.link>
+                  <% else %>
+                    First of its line
+                  <% end %>
+                </p>
+              </div><span class="ancestry-generation">Gen {r.generation}</span><span class={"ancestry-status #{if r.alive, do: "cool"}"}>{if r.alive,
+                do: "Alive",
+                else: r.cause || "Past life"}</span>
+            </article>
+          </div>
+          <div :if={@rows == []} class="empty-state">
+            <h3>No records match</h3><p>The book is empty or your filters exclude every mind.</p>
+          </div>
+          <nav class="pagination" aria-label="Ancestry pages">
+            <button
+              class="button button-quiet"
+              phx-click="page"
+              phx-value-direction="previous"
+              disabled={@page == 1}
+            >← Previous</button><span>Page {@page} of {@pages}</span><button
+              class="button button-quiet"
+              phx-click="page"
+              phx-value-direction="next"
+              disabled={@page >= @pages}
+            >Next →</button>
+          </nav>
+        </section><footer class="site-footer">
+          <span>EVOLVING MINDS · THE ANCESTRY BOOK</span><.link navigate={~p"/"}>Return to the living world ↗</.link>
+        </footer>
+      </main>
     </div>
     """
   end

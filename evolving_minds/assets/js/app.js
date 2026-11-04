@@ -1,44 +1,78 @@
-// If you want to use Phoenix channels, run `mix help phx.gen.channel`
-// to get started and then uncomment the line below.
-// import "./user_socket.js"
-
-// You can include dependencies in two ways.
-//
-// The simplest option is to put them in assets/vendor and
-// import them using relative paths:
-//
-//     import "../vendor/some-package.js"
-//
-// Alternatively, you can `npm install some-package --prefix assets` and import
-// them using a path starting with the package name:
-//
-//     import "some-package"
-//
-
-// Include phoenix_html to handle method=PUT/DELETE in forms and buttons.
 import "phoenix_html"
-// Establish Phoenix Socket and LiveView configuration.
 import {Socket} from "phoenix"
 import {LiveSocket} from "phoenix_live_view"
 import topbar from "../vendor/topbar"
 
-let csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
-let liveSocket = new LiveSocket("/live", Socket, {
+const Hooks = {
+  Watchlist: {
+    mounted() {
+      this.storageKey = "evolving-minds:watchlist:v1"
+      this.restore = raw => {
+        try {
+          const ids = JSON.parse(raw || "[]")
+          if (Array.isArray(ids)) this.pushEvent("restore_watchlist", {ids: ids.filter(id => typeof id === "string").slice(0, 12)})
+        } catch (_) { /* Invalid or unavailable storage never prevents observing. */ }
+      }
+      try { this.restore(localStorage.getItem(this.storageKey)) } catch (_) {}
+      this.onStorage = event => { if (event.key === this.storageKey) this.restore(event.newValue) }
+      window.addEventListener("storage", this.onStorage)
+    },
+    updated() {
+      try { localStorage.setItem(this.storageKey, this.el.dataset.watchlist) } catch (_) {}
+    },
+    destroyed() { window.removeEventListener("storage", this.onStorage) }
+  },
+  Dialog: {
+    mounted() {
+      this.previousFocus = document.activeElement
+      document.documentElement.classList.add("has-dialog")
+      this.dialog = this.el.querySelector("[role=dialog]")
+      requestAnimationFrame(() => this.dialog.focus())
+      this.onKey = event => {
+        const guide = document.getElementById("field-guide-dialog")
+        if (guide && guide !== this.el) return
+        if (event.key === "Escape") {
+          event.preventDefault()
+          this.pushEvent(this.el.dataset.closeEvent, {})
+        }
+        if (event.key === "Tab") {
+          const elements = [...this.dialog.querySelectorAll('a[href],button:not([disabled]),input,select,summary,[tabindex="0"]')].filter(el => el.getClientRects().length)
+          const first = elements[0], last = elements[elements.length - 1]
+          if (!first) { event.preventDefault(); this.dialog.focus(); return }
+          if (event.shiftKey && (document.activeElement === first || document.activeElement === this.dialog)) { event.preventDefault(); last.focus() }
+          else if (!event.shiftKey && (document.activeElement === last || document.activeElement === this.dialog)) { event.preventDefault(); first.focus() }
+        }
+      }
+      document.addEventListener("keydown", this.onKey)
+    },
+    destroyed() {
+      document.removeEventListener("keydown", this.onKey)
+      if (![...document.querySelectorAll(".dialog-backdrop")].some(el => el !== this.el)) document.documentElement.classList.remove("has-dialog")
+      if (this.previousFocus?.isConnected) this.previousFocus.focus()
+    }
+  },
+  CopyLink: {
+    mounted() {
+      this.copy = async () => {
+        try {
+          await navigator.clipboard.writeText(window.location.href)
+          this.el.textContent = "Link copied ✓"
+          this.el.setAttribute("aria-live", "polite")
+        } catch (_) { this.el.textContent = "Copy the address bar link" }
+      }
+      this.el.addEventListener("click", this.copy)
+    },
+    destroyed() { this.el.removeEventListener("click", this.copy) }
+  }
+}
+
+const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
+const liveSocket = new LiveSocket("/live", Socket, {
   longPollFallbackMs: 2500,
-  params: {_csrf_token: csrfToken}
+  params: {_csrf_token: csrfToken},
+  hooks: Hooks
 })
-
-// Show progress bar on live navigation and form submits
-topbar.config({barColors: {0: "#29d"}, shadowColor: "rgba(0, 0, 0, .3)"})
-window.addEventListener("phx:page-loading-start", _info => topbar.show(300))
-window.addEventListener("phx:page-loading-stop", _info => topbar.hide())
-
-// connect if there are any LiveViews on the page
+topbar.config({barColors: {0: "#b9efd2"}, shadowColor: "rgba(0, 0, 0, .3)"})
+window.addEventListener("phx:page-loading-start", () => topbar.show(300))
+window.addEventListener("phx:page-loading-stop", () => topbar.hide())
 liveSocket.connect()
-
-// expose liveSocket on window for web console debug logs and latency simulation:
-// >> liveSocket.enableDebug()
-// >> liveSocket.enableLatencySim(1000)  // enabled for duration of browser session
-// >> liveSocket.disableLatencySim()
-window.liveSocket = liveSocket
-
