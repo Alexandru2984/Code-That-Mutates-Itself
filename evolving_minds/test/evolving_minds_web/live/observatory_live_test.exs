@@ -116,4 +116,18 @@ defmodule EvolvingMindsWeb.ObservatoryLiveTest do
     refute Map.has_key?(response["records"], "children_by")
     assert Enum.all?(response["entities"], &(not Map.has_key?(&1, "behavior_fn")))
   end
+
+  test "network links open dossiers and respect the visible population", %{conn: conn} do
+    first = mind("NetworkAlpha")
+    second = mind("NetworkBeta")
+    {:ok, view, _} = live(conn, "/")
+    snapshot = %{WorldPublisher.snapshot() | top_interactions: [{[first, second], 6}]}
+    send(view.pid, {:world_update, snapshot})
+    render_click(view, "set_view", %{"view" => "network"})
+    assert has_element?(view, "#social-network .network-node", "NetworkAlpha")
+    assert has_element?(view, "#social-network .connection-list", "6 memories")
+    view |> form("#filter-form", filters: %{query: "NetworkAlpha"}) |> render_change()
+    refute has_element?(view, "#social-network .network-node")
+    assert render(view) =~ "No connections in this selection"
+  end
 end

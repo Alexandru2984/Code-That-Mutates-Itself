@@ -131,8 +131,9 @@ defmodule EvolvingMindsWeb.WorldLive do
        |> assign(filters: Observatory.filters(%{}), only_watched: false)
        |> refresh_stream(reset: true)}
 
-  def handle_event("set_view", %{"view" => view}, socket) when view in ["grid", "map", "leaders"],
-    do: {:noreply, assign(socket, :view, view)}
+  def handle_event("set_view", %{"view" => view}, socket)
+      when view in ["grid", "map", "network", "leaders"],
+      do: {:noreply, assign(socket, :view, view)}
 
   def handle_event("filter_events", %{"type" => type}, socket)
       when type in ["all", "death", "reproduction", "mutation", "epoch_change", "birth"],
@@ -265,11 +266,15 @@ defmodule EvolvingMindsWeb.WorldLive do
 
   defp diff_stream(socket, previous, visible) do
     prev = previous |> Enum.with_index() |> Map.new(fn {e, i} -> {e.id, {e, i}} end)
-    ids = MapSet.new(visible, & &1.id)
+    positions = visible |> Enum.with_index() |> Map.new(fn {e, index} -> {e.id, index} end)
 
     socket =
-      Enum.reduce(previous, socket, fn e, acc ->
-        if MapSet.member?(ids, e.id), do: acc, else: stream_delete(acc, :entities, e)
+      previous
+      |> Enum.with_index()
+      |> Enum.reduce(socket, fn {e, index}, acc ->
+        # Updating an existing stream item does not move its DOM node. Delete
+        # moved items first, then insert them at their new sorted positions.
+        if positions[e.id] == index, do: acc, else: stream_delete(acc, :entities, e)
       end)
 
     visible
@@ -464,6 +469,9 @@ defmodule EvolvingMindsWeb.WorldLive do
             </div>
           </div>
         </section>
+        <nav class="world-jump-links" aria-label="Jump within the observatory">
+          <a href="#explore">Explore minds ↓</a><a href="#world-journal">World journal ↓</a><a href="#population-analysis">Population analysis ↓</a>
+        </nav>
         <div class="world-layout">
           <section id="explore" class="explore" aria-labelledby="explore-heading">
             <div class="section-heading explore-heading">
@@ -490,7 +498,12 @@ defmodule EvolvingMindsWeb.WorldLive do
               <div class="view-tabs" role="group" aria-label="Observation view">
                 <button
                   :for={
-                    {label, view} <- [{"Minds", "grid"}, {"Trait map", "map"}, {"Leaders", "leaders"}]
+                    {label, view} <- [
+                      {"Minds", "grid"},
+                      {"Trait map", "map"},
+                      {"Network", "network"},
+                      {"Leaders", "leaders"}
+                    ]
                   }
                   phx-click="set_view"
                   phx-value-view={view}
@@ -688,6 +701,63 @@ defmodule EvolvingMindsWeb.WorldLive do
                 Each dot is a living mind. Solari are gold; Umbra are violet. Positions change as traits mutate.
               </p>
             </div>
+            <section
+              :if={@view == "network"}
+              id="social-network"
+              class="panel network-panel"
+              aria-labelledby="network-heading"
+            >
+              <% graph = Observatory.network(@top_interactions, @visible_entities) %>
+              <div class="section-heading">
+                <h3 id="network-heading">The social fabric</h3><span>Strongest recent connections</span>
+              </div>
+              <p class="muted">
+                Explore the most frequent exchanges among visible living minds. Counts come from retained memories, not all-time totals.
+              </p>
+              <svg
+                :if={graph.links != []}
+                viewBox="0 0 600 365"
+                class="network-map"
+                aria-label="Interactive network of recent mind connections"
+              >
+                <line
+                  :for={{[from, to], count} <- graph.links}
+                  x1={graph.nodes[from].x}
+                  y1={graph.nodes[from].y}
+                  x2={graph.nodes[to].x}
+                  y2={graph.nodes[to].y}
+                  stroke="#75d9c5"
+                  stroke-opacity="0.3"
+                  stroke-width={min(1 + count / 10, 7)}
+                />
+                <.link
+                  :for={{id, node} <- graph.nodes}
+                  patch={~p"/?#{[mind: id]}"}
+                  aria-label={"Open #{node.name} dossier"}
+                  class="network-node"
+                >
+                  <circle
+                    cx={node.x}
+                    cy={node.y}
+                    r="15"
+                    fill={if node.tribe == :solari, do: "#e5bb72", else: "#c5a3ed"}
+                  />
+                  <text x={node.x} y={node.y + 30} text-anchor="middle" fill="#d6e5df" font-size="12">
+                    {node.name}
+                  </text>
+                </.link>
+              </svg>
+              <p :if={graph.links == []} class="empty-state muted">
+                No connections in this selection yet. Reset filters or wait for the next exchanges.
+              </p>
+              <ol class="connection-list">
+                <li :for={{[from, to], count} <- graph.links}>
+                  <.link patch={~p"/?#{[mind: from]}"}>{graph.nodes[from].name}</.link><span>↔</span><.link patch={
+                    ~p"/?#{[mind: to]}"
+                  }>{graph.nodes[to].name}</.link><strong>{count} memories</strong>
+                </li>
+              </ol>
+            </section>
             <div :if={@view == "leaders"} class="leaderboards">
               <section
                 :for={
@@ -744,7 +814,7 @@ defmodule EvolvingMindsWeb.WorldLive do
             </section>
           </section>
           <aside class="world-sidebar" aria-label="World stories and trends">
-            <section class="panel events-panel">
+            <section id="world-journal" class="panel events-panel">
               <div class="section-heading">
                 <h2>World journal</h2><span class="live-label">Global Events</span>
               </div><label class="sr-only" for="event-type">Filter journal events</label><form
@@ -820,6 +890,51 @@ defmodule EvolvingMindsWeb.WorldLive do
                 stroke-width="2"
                 vector-effect="non-scaling-stroke"
               /></svg>
+            </section>
+            <section
+              id="population-analysis"
+              class="panel population-analysis"
+              aria-labelledby="analysis-heading"
+            >
+              <div class="section-heading">
+                <h2 id="analysis-heading">Inside the population</h2><span>living minds</span>
+              </div><figure
+                :for={
+                  {trait, label, color} <- [
+                    {:aggression, "Aggression", "warm"},
+                    {:curiosity, "Curiosity", "cool"}
+                  ]
+                }
+                class="distribution-chart"
+              >
+                <figcaption class={color}>{label} distribution</figcaption><div
+                  class={"distribution-bars #{color}"}
+                  role="img"
+                  aria-label={
+                    Enum.map_join(
+                      Observatory.histogram(@entities, trait),
+                      ", ",
+                      &"#{&1.label}: #{&1.count} minds"
+                    )
+                  }
+                >
+                  <div
+                    :for={bucket <- Observatory.histogram(@entities, trait)}
+                    title={"#{bucket.label}: #{bucket.count} minds"}
+                  >
+                    <span style={"height: #{max(bucket.height, 2)}%"}></span>
+                  </div>
+                </div><div class="chart-scale"><span>0%</span><span>100%</span></div>
+              </figure><h3>Generations Alive</h3><div class="generation-bars">
+                <div
+                  :for={bucket <- Observatory.generations(@entities)}
+                  title={"Generation #{bucket.generation}: #{bucket.count} minds"}
+                >
+                  <span class="generation-count">{bucket.count}</span><div>
+                    <span style={"height: #{max(bucket.height, 2)}%"}></span>
+                  </div><small>{bucket.generation}</small>
+                </div>
+              </div><p class="muted">The latest twelve generations in the living population.</p>
             </section>
             <section class="panel records-panel">
               <div class="section-heading">

@@ -42,6 +42,66 @@ defmodule EvolvingMindsWeb.Observatory do
     }
   end
 
+  def histogram(entities, trait) do
+    counts =
+      Enum.reduce(entities, List.duplicate(0, 10), fn entity, acc ->
+        bucket = entity.traits |> Map.fetch!(trait) |> Kernel.*(10) |> trunc() |> min(9) |> max(0)
+        List.update_at(acc, bucket, &(&1 + 1))
+      end)
+
+    largest = max(Enum.max(counts), 1)
+
+    counts
+    |> Enum.with_index()
+    |> Enum.map(fn {count, index} ->
+      %{
+        count: count,
+        height: round(count / largest * 100),
+        label: "#{index * 10}–#{(index + 1) * 10}%"
+      }
+    end)
+  end
+
+  def generations(entities) do
+    counts = Enum.frequencies_by(entities, & &1.generation)
+    shown = counts |> Enum.sort_by(&elem(&1, 0)) |> Enum.take(-12)
+    largest = shown |> Enum.map(&elem(&1, 1)) |> Enum.max(fn -> 1 end)
+
+    shown
+    |> Enum.map(fn {generation, count} ->
+      %{generation: generation, count: count, height: round(count / largest * 100)}
+    end)
+  end
+
+  def network(interactions, visible) do
+    living = Map.new(visible, &{&1.id, &1})
+
+    links =
+      Enum.filter(interactions, fn {pair, _} ->
+        length(pair) == 2 and Enum.all?(pair, &Map.has_key?(living, &1))
+      end)
+
+    ids = links |> Enum.flat_map(&elem(&1, 0)) |> Enum.uniq() |> Enum.sort()
+
+    nodes =
+      ids
+      |> Enum.with_index()
+      |> Map.new(fn {id, index} ->
+        angle = index * 2 * :math.pi() / max(length(ids), 1) - :math.pi() / 2
+
+        {id,
+         %{
+           id: id,
+           name: living[id].name,
+           tribe: living[id].tribe,
+           x: 300 + 215 * :math.cos(angle),
+           y: 180 + 125 * :math.sin(angle)
+         }}
+      end)
+
+    %{nodes: nodes, links: links}
+  end
+
   def personality(%{aggression: a}) when a >= 0.7, do: "Warrior"
   def personality(%{curiosity: c}) when c >= 0.6, do: "Explorer"
   def personality(%{aggression: a}) when a < 0.3, do: "Diplomat"
