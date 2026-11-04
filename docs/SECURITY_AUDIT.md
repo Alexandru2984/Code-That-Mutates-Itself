@@ -3,7 +3,7 @@
 Data: 2026-11-04. Audit de cod și configurație locală, verificări HTTP neintruzive.
 Nu s-au făcut teste de epuizare de resurse sau atacuri destructive în producție.
 
-## Inventar verificat
+## Inventar inițial, înainte de remedieri
 
 - Elixir 1.18.3 / OTP 27; Phoenix LiveView; simulare fără bază de date SQL.
 - Serviciu activ: `evolving-minds-canary.service`, utilizator `micu`, port 4001 pe loopback.
@@ -33,6 +33,17 @@ Nu s-au făcut teste de epuizare de resurse sau atacuri destructive în producț
 | UX-01 | Produs | Header cu lățime minimă cumulată mare, texte de 7–9px, select fără etichete, dialoguri fără focus trap/Escape, lipsesc reconectare și accesibilitate pentru mișcare redusă. | Layout mobil și componente/feedback accesibile. |
 | UX-02 | Produs | Căutarea filtrează doar ID, genealogia încarcă întregul arbore, nu există favorite, comparație sau linkuri către un dosar. | Funcții de explorare și structură de navigare. |
 
+## Constatare suplimentară la izolarea backupului
+
+SEC-10, medie, acces local de scriere în arhive necesar: jobul offsite verifica și
+redeschidea succesiv calea partajată. Schimbarea fișierului între pași putea face
+uploadul să citească alți octeți decât cei validați; checksumul extern accepta și
+căi arbitrare din sidecar. Remedierea deschide fișiere regulate cu O_NOFOLLOW,
+impune limite de citire/decompresie și un sidecar strict, apoi încarcă exclusiv o
+copie verificată din directorul privat al UID-ului offsite. Șase teste de regresie
+acoperă inclusiv schimbarea în symlink între selecție și open. Nu este o
+vulnerabilitate accesibilă direct printr-un upload web public.
+
 ## Puncte solide
 
 HEEx escapează textul; euristicile sunt funcții construite din trăsături, fără eval.
@@ -45,15 +56,16 @@ Scanarea pe tipare este limitată și nu dovedește absența altor tipuri de sec
 ## Model de amenințări și limite
 
 Principalele riscuri sunt escaladarea public→admin, DoS pe conexiuni/acțiuni și
-alterarea stării persistente prin acces local. Compromiterea procesului `micu`
-trebuie evaluată și față de celelalte servicii ale VPS-ului: același utilizator
-deține mai multe proiecte; un utilizator dedicat ar reduce raza de impact.
+alterarea stării persistente prin acces local. Procesul web și backupul local
+rulează acum ca `evolving-minds`, iar transferul offsite ca `evolving-minds-offsite`,
+fără grupuri privilegiate. Operatorul `micu` păstrează drepturile de deploy;
+compromiterea operatorului sau a root rămâne în afara izolării procesului web.
 
 Limitarea aplicației este pentru o singură instanță BEAM; la scalare trebuie
 un buget comun între noduri. Un atac distribuit necesită protecții și la edge.
 Nu există suficiente date pentru a estima cost financiar, MTTD real sau numărul
-vizitatorilor afectați. Verificarea altor domenii și testarea restaurării remote
-nu fac parte din acest audit al repository-ului.
+vizitatorilor afectați. Verificarea altor domenii nu face parte din acest audit. Restaurarea din
+destinația remote aleasă de proprietar a fost testată ulterior într-o instanță izolată.
 
 ## Surse tehnice
 
@@ -99,7 +111,8 @@ nu fac parte din acest audit al repository-ului.
 
 ## Dovezi de verificare
 
-- 49 teste core, 53 teste web, 5 teste JavaScript și 6 teste Chromium: **113 trecute**.
+- 49 teste core, 61 teste web, 14 teste JavaScript, 6 teste Python și 11 teste Chromium: **141 trecute**.
+  Fluxurile laboratorului au fost reverificate după ajustarea comparațiilor.
 - Build de producție și mix release reușite; serviciul activ are readiness 200.
 - Pagini verificate la 360, 390, 768, 1440 și 1920 px; fără overflow orizontal.
 - Verificate în browser: favorite după reload, comparații/dosare, Escape/focus,
@@ -108,6 +121,35 @@ nu fac parte din acest audit al repository-ului.
   schimba experimentul, reluare deterministă și pas individual fără conexiune.
   Importul este local, limitat la 500 KB, cu schemă explicită și copiere doar a
   câmpurilor permise. Datele importate sunt inserate prin textContent/Option.
+- Biblioteca locală: recuperarea salvării vechi, șase sloturi fără eliminare automată,
+  comparații, redenumire și Undo verificate. Numele cu markup rămân text; CSV-ul
+  neutralizează formulele și escapează ghilimelele. Datele locale corupte nu sunt
+  suprascrise automat. Misiunile sunt realizări educaționale locale, nu scoruri de
+  încredere pentru competiții. Linkurile validate reproduc numai condițiile inițiale.
+- Accesibilitate: eticheta logo-ului și semantica barei pe triburi corectate;
+  pictogramele butoanelor etichetate sunt decorative pentru cititoarele de ecran.
+  Scanări axe-core pentru 13 combinații de pagină/stare/lățime fără erori automate
+  detectabile. Contrastul peste gradiente și unele pictograme cer verificare umană;
+  acest rezultat nu reprezintă o certificare WCAG. Navigarea prin Tab/skip link,
+  focusul și Escape au fost verificate separat.
+- CI: acțiuni oficiale fixate la SHA, runtime Node 24, credențiale Git nepersistate,
+  token cu contents:read și artefacte numai din fixture-urile de browser, cu retenție
+  de șapte zile. Etichetele și action.yml au fost verificate upstream; workflowul
+  nu a fost rulat pe GitHub în această sesiune.
+- Dinastii: filtre combinate pentru o familie, rădăcini absente, cicluri legacy și
+  un lanț de 2.000 de înregistrări verificate. Structurile genealogice sunt calculate
+  la încărcare/refresh, evitând reconstruirea lor la fiecare schimbare de filtru.
+- Runtime dedicat și release-uri read-only verificate în producție. Panoul admin
+  afișează trei stări Healthy pentru persistență și copii; cititorul statusului are
+  limite de dimensiune și respinge înregistrări invalide sau din viitor.
+- Offsite: UID separat, credențiale private, upload/download prin crypt și SHA-256
+  verificate; arhiva recuperată a pornit cu succes în izolare. Rollbackul instalării
+  a trecut trei scenarii de verificare locală a fișierelor/stării timerului, cu
+  apelurile systemd simulate; nu s-a injectat o eroare în jobul de producție.
+  După activarea stagingului privat, un nou transfer real din 2026-11-04 15:36 UTC
+  a verificat prin download arhiva de 78.429 bytes, cu Result=success. Helperul și
+  scriptul instalate sunt root-owned; serviciul web a rămas activ fără restarturi
+  automate. Pagini și fluxuri au fost reverificate prin Cloudflare după deploy.
 - HTTP public prin Cloudflare: `/`, `/tree`, `/lab`, `/healthz`, robots și sitemap
   funcționale; admin anonim 401, `/.env` și `/.git/config` 403, snapshot public 404.
 - Backup local din 2026-11-04: checksum și gzip valide; pornire izolată reușită,

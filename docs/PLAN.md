@@ -82,6 +82,11 @@ lățime. CI folosește acțiuni oficiale fixate la SHA pe Node 24 și păstreaz
 capturi, rapoarte și trace-uri ale fixture-urilor timp de șapte zile. Auditul
 automat nu înlocuiește evaluarea manuală a contrastului și a tehnologiilor asistive.
 
+Backupul extern încarcă exclusiv o copie privată verificată a arhivei: deschidere
+fără urmărirea symlinkurilor, checksum cu format și cale strictă, limite de 8 MB
+la intrare și 4 MB la decompresie. Șase teste Python reproduc atacuri asupra
+fișierelor partajate; noul job a trecut și un transfer real upload/download.
+
 ## Extensii ulterioare, fără a le prezenta ca livrate
 
 - Replays și serii istorice persistente, cu retenție și buget de stocare.

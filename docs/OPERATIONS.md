@@ -92,6 +92,8 @@ These are operating targets, not a claim that an external alert service is confi
 The selected destination is the existing encrypted Google Drive remote, scoped by
 the job to `apps/elixir.micutu.com`. `deploy/setup-offsite.sh` installs the service,
 performs a real upload/download verification and enables its six-hour timer.
+Failed setup restores the previous managed files and timer enablement/activity;
+files created only by an incomplete first install are removed during rollback.
 It provisions only the crypt section and its Drive dependency from the operator's
 rclone config; other remotes are not copied. Existing provider OAuth permissions
 are unchanged. The root credential is `/etc/evolving-minds/backup-rclone.conf`, 0600.
@@ -100,7 +102,13 @@ state directory. No credentials are committed, printed or included in world arch
 
 The offsite job runs as `evolving-minds-offsite`, separate from the web UID, with
 read-only ACL access to local archives. The web process cannot read its credentials.
-The local backup job is required to succeed before upload. Each archive is uploaded,
+The local backup job is required to succeed before upload. The helper
+`/usr/local/libexec/evolving-minds/stage-offsite.py` opens shared files with
+O_NOFOLLOW, checks regular-file type, freshness, sizes and a strict checksum
+record, then freezes the exact archive in the offsite UID's private state.
+Compressed input is capped at 8 MB and expansion at 4 MB. Remote operations use
+only that verified private copy, so changing a shared path cannot swap the upload
+after validation. Each archive is uploaded,
 downloaded through crypt, compared byte for byte and checked as gzip before its
 checksum and `latest.json` manifest are published. Only matching application archives
 older than 30 days in this exact remote prefix are pruned. `latest.json` is retained.
