@@ -1,0 +1,11 @@
+[Unit]
+Description=Verify encrypted Evolving Minds backup every six hours
+
+[Timer]
+OnCalendar=*-*-* 00,06,12,18:20:00 UTC
+RandomizedDelaySec=5m
+Persistent=true
+Unit=evolving-minds-offsite.service
+
+[Install]
+WantedBy=timers.target

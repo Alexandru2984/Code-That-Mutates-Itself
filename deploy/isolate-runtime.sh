@@ -74,6 +74,11 @@ systemctl stop "$UNIT"
 cp -p "$DATA/world.snapshot" "$checkpoint/world.snapshot"
 chown -R -P "$RUN_USER:$RUN_GROUP" "$DATA" "$BACKUP"
 chmod 700 "$DATA" "$BACKUP"
+if id evolving-minds-offsite > /dev/null 2>&1; then
+  setfacl -m u:evolving-minds-offsite:r-x "$BACKUP"
+  setfacl -d -m u::rwx,g::---,o::---,u:evolving-minds-offsite:r-x,m::r-x "$BACKUP"
+  find "$BACKUP" -maxdepth 1 -type f -name 'world-*' -exec setfacl -m u:evolving-minds-offsite:r-- {} +
+fi
 install -m 755 "$REPO_ROOT/deploy/backup-local.sh" /usr/local/sbin/evolving-minds-backup
 install -m 644 "$checkpoint/evolving-minds.service" "/etc/systemd/system/$UNIT"
 install -m 644 "$checkpoint/evolving-minds-backup.service" "/etc/systemd/system/$BACKUP_UNIT"

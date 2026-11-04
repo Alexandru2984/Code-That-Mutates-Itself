@@ -47,10 +47,15 @@ sincronizarea repository-ului remote. Comenzile și testele au trecut local.
 
 ## Următoarele priorități
 
-1. Backup verificat pe alt host/storage și exercițiu de recuperare după pierderea VPS-ului.
-2. Utilizator Unix dedicat aplicației, cu adaptarea release-urilor, permisiunilor și backupului.
-3. Alerte externe pentru readiness, snapshoturi vechi, restarturi și abuz de autentificare.
-4. Test de capacitate într-un mediu separat și bugete comune dacă se adaugă noduri BEAM.
+1. Alerte externe pentru readiness, snapshoturi vechi, restarturi și abuz de autentificare.
+2. Exercițiu complet de reconstruire a infrastructurii pe alt host; backupul extern este acum activ și verificat.
+3. Test de capacitate într-un mediu separat și bugete comune dacă se adaugă noduri BEAM.
+
+Continuare: runtime-ul și backupul local au fost mutate pe `evolving-minds`, fără
+grupuri privilegiate; release-urile sunt read-only. Offsite-ul rulează separat ca
+`evolving-minds-offsite`, cu un subset privat al configurației rclone și fără a
+expune credențialele procesului web. Copia criptată a fost recuperată și pornită
+într-o instanță izolată; datele de producție nu au fost înlocuite.
 
 ## Extensii ulterioare, fără a le prezenta ca livrate
 

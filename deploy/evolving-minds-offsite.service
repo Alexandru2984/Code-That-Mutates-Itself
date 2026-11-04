@@ -1,0 +1,41 @@
+[Unit]
+Description=Verified encrypted offsite backup for Evolving Minds
+Requires=evolving-minds-backup.service
+After=network-online.target evolving-minds-backup.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=evolving-minds-offsite
+Group=evolving-minds-offsite
+LoadCredential=rclone.conf:@ENV_DIR@/backup-rclone.conf
+Environment=BACKUP_REMOTE=gdrive-vps-crypt:apps/elixir.micutu.com
+Environment=LOCAL_BACKUP_DIR=@BACKUP_DIR@
+Environment=GOMAXPROCS=2
+StateDirectory=evolving-minds-offsite
+StateDirectoryMode=0700
+ExecStart=/usr/local/sbin/evolving-minds-offsite-backup
+TimeoutStartSec=180
+UMask=0077
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectClock=yes
+ProtectControlGroups=yes
+ProtectHostname=yes
+ProtectKernelLogs=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+ProtectProc=invisible
+InaccessiblePaths=@ENV_DIR@ @REPO_ROOT@/.git
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+CapabilityBoundingSet=
+AmbientCapabilities=
+TasksMax=64
+MemoryMax=256M

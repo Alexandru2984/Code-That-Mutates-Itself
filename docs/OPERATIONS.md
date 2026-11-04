@@ -9,6 +9,8 @@
 - Release: `current` symlink → private `.releases/<time>-<revision>`.
 - Nginx site: `/etc/nginx/sites-available/elixir.micutu.com`.
 - Local backups: `/srv/backups/evolving-minds`, daily systemd timer, 14 days.
+- Encrypted offsite backups: `evolving-minds-offsite.timer`, every six hours with
+  up to five minutes of jitter, `gdrive-vps-crypt:apps/elixir.micutu.com`, 30 days.
 
 ## Deploy
 
@@ -84,6 +86,41 @@ Proposed monitor rules: 3 consecutive readiness failures within 60 seconds;
 snapshot older than 120 seconds; repeated unit restarts; sustained HTTP 429/401
 on admin; unexpected successful admin activity. Route alerts to the VPS owner.
 These are operating targets, not a claim that an external alert service is configured.
+
+## Encrypted offsite backup
+
+The selected destination is the existing encrypted Google Drive remote, scoped by
+the job to `apps/elixir.micutu.com`. `deploy/setup-offsite.sh` installs the service,
+performs a real upload/download verification and enables its six-hour timer.
+It provisions only the crypt section and its Drive dependency from the operator's
+rclone config; other remotes are not copied. Existing provider OAuth permissions
+are unchanged. The root credential is `/etc/evolving-minds/backup-rclone.conf`, 0600.
+systemd loads it into the offsite unit; refreshed tokens live in that unit's private
+state directory. No credentials are committed, printed or included in world archives.
+
+The offsite job runs as `evolving-minds-offsite`, separate from the web UID, with
+read-only ACL access to local archives. The web process cannot read its credentials.
+The local backup job is required to succeed before upload. Each archive is uploaded,
+downloaded through crypt, compared byte for byte and checked as gzip before its
+checksum and `latest.json` manifest are published. Only matching application archives
+older than 30 days in this exact remote prefix are pruned. `latest.json` is retained.
+
+Recover without touching the live world:
+
+```bash
+sudo -u evolving-minds-offsite python3 deploy/fetch-offsite.py \
+  --output /var/lib/evolving-minds-offsite/recovered-world.snapshot
+```
+
+The output must not already exist. The helper validates manifest fields, decrypted
+size, checksum and gzip expansion limits. Validate the recovered ETF with the core
+validator before installing it into stopped production. An archive fetched from
+this remote was booted successfully in an isolated release during this session.
+
+Inspect `systemctl status evolving-minds-offsite.service` and its timer for failures.
+Sanitized status is published in `/var/lib/evolving-minds-offsite/status.json`,
+readable by the app through a file-specific ACL. Credential and detailed error files
+remain private. This status and the journal do not replace external alert delivery.
 
 On suspected unauthorized control: disable public controls and admin credentials,
 restart the unit to invalidate connected sessions, preserve logs and a private
