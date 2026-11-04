@@ -77,10 +77,17 @@ trap rollback ERR
 # Stop through the existing unit before changing either its binary or cookie.
 if systemctl is-active --quiet "$SERVICE_NAME"; then
   if [[ -L "$CURRENT" ]]; then active_bin="$CURRENT/bin/evolving_minds"; else active_bin="$APP_DIR/_build/prod/rel/evolving_minds/bin/evolving_minds"; fi
-  "$active_bin" rpc 'case EvolvingMinds.Persistence.save_now() do :ok -> :ok; error -> raise inspect(error) end' > /dev/null
+  if ! "$active_bin" rpc 'case EvolvingMinds.Persistence.save_now() do :ok -> :ok; error -> raise inspect(error) end' > /dev/null 2>&1; then
+    echo 'Release RPC unavailable; the graceful service shutdown will flush persistence.'
+  fi
   sudo systemctl stop "$SERVICE_NAME"
 fi
 if [[ -s "$APP_DIR/data/world.snapshot" ]]; then
+  snapshot_age=$(( $(date +%s) - $(stat -c %Y "$APP_DIR/data/world.snapshot") ))
+  if (( snapshot_age > 90 )); then
+    echo 'Snapshot is stale after shutdown; refusing to deploy over uncertain world data.' >&2
+    rollback
+  fi
   cp --reflink=auto --preserve=mode,timestamps "$APP_DIR/data/world.snapshot" "$RELEASES/$stamp-world.snapshot"
 fi
 sudo install -m 644 "$unit_tmp" "/etc/systemd/system/$SERVICE_NAME"
