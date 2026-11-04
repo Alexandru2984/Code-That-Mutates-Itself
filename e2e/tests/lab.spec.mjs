@@ -25,10 +25,11 @@ test('named library compares snapshots, safely exports CSV and supports rename a
   await page.goto('/lab');await expect(page.locator('fieldset')).toBeEnabled();
   await expect(page.locator('[data-library-undo]')).not.toBeVisible();
   await page.locator('[data-save-name]').fill('<img src=x onerror=alert(1)>');await page.locator('[data-action=save]').click();
-  await page.locator('[data-scenario=conflict]').click();await page.locator('[data-save-name]').fill('=Variant B');await page.locator('[data-action=save]').click();
+  await page.locator('.saved-experiment [data-entry-action=compare]').click();await expect(page.locator('[data-comparison-chart]')).not.toBeVisible();await expect(page.locator('[data-comparison-axis]')).toContainText('Run and save');
+  await page.locator('[data-scenario=conflict]').click();for(let i=0;i<5;i++)await page.locator('[data-action=step]').click();await page.locator('[data-save-name]').fill('=Variant B');await page.locator('[data-action=save]').click();
   await expect(page.locator('.saved-experiment')).toHaveCount(2);await expect(page.locator('[data-library-list] img')).toHaveCount(0);
   await page.locator('.saved-experiment').nth(0).locator('[data-entry-action=compare]').click();
-  await page.locator('.saved-experiment').nth(1).locator('[data-entry-action=compare]').click();
+  await expect(page.locator('[data-comparison-chart]')).toBeVisible();
   await expect(page.locator('.saved-comparison-card')).toHaveCount(2);await expect(page.locator('[data-comparison-chart] polyline')).toHaveCount(2);
   const pending=page.waitForEvent('download');await page.locator('[data-entry-action=export_compare]').click();const download=await pending;
   const csv=await fs.readFile(await download.path(),'utf8');expect(csv).toContain('"\'=Variant B"');

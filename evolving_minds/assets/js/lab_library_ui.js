@@ -29,7 +29,8 @@ export function mountLibrary(hook){
     const colors=['#b9efd2','#e5bb72','#c5a3ed'],dashes=['','5 2','1 2'];
     const chart=root.querySelector('[data-comparison-chart]');chart.replaceChildren()
     const histories=selected.flatMap(e=>e.world.history),min=Math.min(...histories.map(p=>p.tick)),max=Math.max(...histories.map(p=>p.tick))
-    root.querySelector('[data-comparison-axis]').textContent=selected.length?`Step ${min} → ${max} · Population 0–60`:''
+    const hasTrace=selected.some(entry=>entry.world.history.length>1);chart.style.display=hasTrace?'':'none'
+    root.querySelector('[data-comparison-axis]').textContent=!selected.length?'':hasTrace?`Step ${min} → ${max} · Population 0–60. Single-point snapshots have no trace.`:'Run and save an experiment after at least one step to draw its population history. Starting values appear in the cards above.'
     for(const [index,entry]of selected.entries()){
       const card=node('article',undefined,'saved-comparison-card'),title=node('h4',entry.name);title.style.color=colors[index];card.append(title)
       for(const [label,value]of [['Population',entry.summary.population],['Mean energy',`${entry.summary.energy}%`],['Generation',entry.summary.generation],['Aggression',percent(entry.summary.aggression)],['Curiosity',percent(entry.summary.curiosity)],['Births / deaths',`${entry.world.births} / ${entry.world.deaths}`]]){const line=node('p');line.append(node('span',label),node('strong',value));card.append(line)}
