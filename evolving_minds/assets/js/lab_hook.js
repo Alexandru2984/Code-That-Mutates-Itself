@@ -1,3 +1,5 @@
+import {mountRecovery} from './lab_recovery_ui'
+import {downloadText} from './downloads'
 import {refreshPwaPanel} from './pwa_client'
 import {mountFieldwork} from './lab_fieldwork_ui'
 import {mountLibrary} from './lab_library_ui'
@@ -9,10 +11,10 @@ export const EvolutionLab = {
     this.canvas=this.el.querySelector('canvas');this.ctx=this.canvas.getContext('2d');if(!this.ctx)throw Error('Canvas unavailable');
     this.form=this.el.querySelector('form');
     this.readConfig=()=>Object.fromEntries(new FormData(this.form));
-    this.onSubmit=e=>{e.preventDefault();this.world=createWorld(this.readConfig());this.selected=null;this.running=false;this.elapsed=0;this.render()};
+    this.onSubmit=e=>{e.preventDefault();this.world=createWorld(this.readConfig());this.selected=null;this.running=false;this.elapsed=0;this.render();this.recovery?.touch()};
     this.form.addEventListener('submit',this.onSubmit);
     this.notice=text=>{this.el.querySelector('[data-lab-notice]').textContent=text};
-    this.loadSnapshot=data=>{this.world=restoreWorld(data);this.running=false;this.elapsed=0;this.selected=null;for(const [key,value] of Object.entries(this.world.config)){if(this.form.elements[key])this.form.elements[key].value=value}this.render()};
+    this.loadSnapshot=data=>{this.world=restoreWorld(data);this.running=false;this.elapsed=0;this.selected=null;for(const [key,value] of Object.entries(this.world.config)){if(this.form.elements[key])this.form.elements[key].value=value}this.render();this.recovery?.touch()};
     this.onFile=async e=>{
       const file=e.target.files?.[0];if(!file)return;
       try{if(file.size>512000)throw Error('Snapshot files must be smaller than 500 KB.');this.loadSnapshot(JSON.parse(await file.text()));this.notice('Experiment imported and paused. Continue whenever you are ready.')}catch(error){this.notice(error instanceof SyntaxError?'This file is not valid JSON.':error.message)}
@@ -22,20 +24,18 @@ export const EvolutionLab = {
     this.onClick=e=>{
       const action=e.target.closest('[data-action]')?.dataset.action;
       if(action==='play'){if(this.world.entities.length)this.running=!this.running;this.render()}
-      if(action==='step'){this.running=false;stepWorld(this.world);this.render()}
+      if(action==='step'){this.running=false;stepWorld(this.world);this.render();this.recovery?.touch()}
       if(action==='save'){try{this.library.save()}catch(error){this.notice(error.message||'Browser storage is unavailable. Export the experiment to keep it.')}}
       if(action==='load'){try{this.library.load()}catch(error){this.notice(error.message||'The saved experiment could not be read.')}}
       if(action==='export_csv')this.library.exportCsv();
-      if(action==='export'){
-        const url=URL.createObjectURL(new Blob([JSON.stringify(this.world,null,2)],{type:'application/json'}));
-        const link=document.createElement('a');link.href=url;link.download='evolving-minds-lab.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000)
-      }
+      if(action==='export')downloadText(JSON.stringify(this.world,null,2),'evolving-minds-lab.json')
       const scenario=e.target.closest('[data-scenario]')?.dataset.scenario;
-      if(SCENARIOS[scenario]){for(const [key,value]of Object.entries(SCENARIOS[scenario]))this.form.elements[key].value=value;this.world=createWorld({...this.readConfig(),...SCENARIOS[scenario]});this.selected=null;this.running=false;this.elapsed=0;this.render()}
+      if(SCENARIOS[scenario]){for(const [key,value]of Object.entries(SCENARIOS[scenario]))this.form.elements[key].value=value;this.world=createWorld({...this.readConfig(),...SCENARIOS[scenario]});this.selected=null;this.running=false;this.elapsed=0;this.render();this.recovery?.touch()}
     };
     this.el.addEventListener('click',this.onClick);
     this.onInput=e=>{
-      if(e.target.name==='speed')this.speed=Number(e.target.value);
+      if(e.target.name==='speed'){this.speed=Number(e.target.value);this.recovery?.touch()}
+      if(e.target.matches('[data-save-name]'))this.recovery?.touch();
       const output=e.target.closest('label')?.querySelector('output');
       if(output)output.textContent=e.target.name==='population'?e.target.value:e.target.name==='speed'?`${e.target.value}×`:`${Math.round(Number(e.target.value)*100)}%`;
     };
@@ -44,8 +44,8 @@ export const EvolutionLab = {
     this.onCanvas=e=>{const r=this.canvas.getBoundingClientRect();const x=e.clientX-r.left,y=e.clientY-r.top;let best=null,distance=25;for(const mind of this.world.entities){const dx=20+mind.aggression*(r.width-40)-x,dy=r.height-20-mind.curiosity*(r.height-40)-y;const d=Math.hypot(dx,dy);if(d<distance){best=mind;distance=d}}this.selected=best?.id??null;this.render()};
     this.canvas.addEventListener('click',this.onCanvas);
     this.resize=new ResizeObserver(()=>this.render());this.resize.observe(this.canvas.parentElement);
-    this.animate=time=>{if(this.destroyedFlag)return;const delta=Math.min(time-this.last,250);this.last=time;if(this.running&&!document.hidden){this.elapsed+=delta;let changed=false;while(this.elapsed>=1000/this.speed){this.elapsed-=1000/this.speed;stepWorld(this.world);changed=true}if(changed)this.render()}else this.elapsed=0;this.frame=requestAnimationFrame(this.animate)};
-    this.library=mountLibrary(this);this.fieldwork=mountFieldwork(this);
+    this.animate=time=>{if(this.destroyedFlag)return;const delta=Math.min(time-this.last,250);this.last=time;if(this.running&&!document.hidden){this.elapsed+=delta;let changed=false;while(this.elapsed>=1000/this.speed){this.elapsed-=1000/this.speed;stepWorld(this.world);changed=true}if(changed){this.render();this.recovery?.touch()}}else this.elapsed=0;this.frame=requestAnimationFrame(this.animate)};
+    this.library=mountLibrary(this);this.fieldwork=mountFieldwork(this);this.recovery=mountRecovery(this);
     this.frame=requestAnimationFrame(this.animate);this.render();refreshPwaPanel();this.el.querySelector('fieldset').disabled=false;this.el.inert=false;this.el.setAttribute('aria-busy','false');const startup=document.querySelector('[data-lab-startup]');if(startup)startup.hidden=true;
   },
   render() {
@@ -71,6 +71,6 @@ export const EvolutionLab = {
     this.el.querySelector('[data-extinct]').hidden=this.world.entities.length>0;
   },
   destroyed() {
-    this.destroyedFlag=true;this.library.destroy();this.fieldwork.destroy();cancelAnimationFrame(this.frame);this.resize.disconnect();this.el.removeEventListener('click',this.onClick);this.el.removeEventListener('input',this.onInput);this.form.removeEventListener('submit',this.onSubmit);this.canvas.removeEventListener('click',this.onCanvas);this.inspect.removeEventListener('change',this.onInspect);this.fileInput.removeEventListener('change',this.onFile);
+    this.destroyedFlag=true;this.recovery.destroy();this.library.destroy();this.fieldwork.destroy();cancelAnimationFrame(this.frame);this.resize.disconnect();this.el.removeEventListener('click',this.onClick);this.el.removeEventListener('input',this.onInput);this.form.removeEventListener('submit',this.onSubmit);this.canvas.removeEventListener('click',this.onCanvas);this.inspect.removeEventListener('change',this.onInspect);this.fileInput.removeEventListener('change',this.onFile);
   }
 }

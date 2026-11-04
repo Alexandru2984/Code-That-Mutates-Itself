@@ -62,3 +62,5 @@
 .library-transfer { display:flex; align-items:center; flex-wrap:wrap; gap:10px; margin:18px 0; }.library-transfer .muted { font-size:11px; }.lab-saved>[role=alert] { margin-top:20px; }.lab-saved>[role=alert] p { margin-top:12px; }.lab-saved button:disabled { opacity:.5; cursor:default; }
 
 .offline-tools { margin-top:24px; }.offline-tools>.muted { margin-top:14px; }.offline-tools>details { margin-top:18px; font-size:12px; color:var(--muted); }.offline-tools summary { min-height:44px; cursor:pointer; }.offline-tools details p { margin-top:10px; }.offline-context h2 { font-size:17px; margin-bottom:12px; }.offline-context .text-button { margin-top:10px; }.offline-tools button:disabled { opacity:.5; cursor:default; }
+
+.lab-recovery { margin:22px 0; }.lab-recovery>time { display:block; font-size:11px; margin-top:5px; }.lab-recovery>.notice { margin-top:14px; }

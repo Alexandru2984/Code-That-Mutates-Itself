@@ -40,7 +40,7 @@ export function mountFieldwork(hook){
   const onClick=async event=>{
     const startId=event.target.closest('[data-mission-start]')?.dataset.missionStart
     if(startId){start(startId);return}
-    if(event.target.closest('[data-mission-stop]')){active=null;update();hook.notice('Mission closed. Your experiment is still here.');return}
+    if(event.target.closest('[data-mission-stop]')){active=null;update();hook.recovery?.touch();hook.notice('Mission closed. Your experiment is still here.');return}
     if(event.target.closest('[data-share-conditions]')){
       try{
         const url=experimentLink(location.href,hook.world.config,active),field=root.querySelector('[data-share-link]');field.value=url;root.querySelector('[data-share-result]').hidden=false
@@ -56,5 +56,5 @@ export function mountFieldwork(hook){
     if(shared){active=shared.mission;hook.loadSnapshot(createWorld(shared.config));if(active)root.querySelector('[data-missions]').open=true;hook.notice('Shared starting conditions loaded at step zero. Run your own reproducible experiment.')}
   }catch(error){hook.notice(error.message)}
   update()
-  return {update,destroy(){root.removeEventListener('click',onClick);window.removeEventListener('storage',onStorage)}}
+  return {update,currentMission:()=>active,restoreMission(id){active=MISSIONS.some(item=>item.id===id)?id:null;if(active)root.querySelector('[data-missions]').open=true;update()},destroy(){root.removeEventListener('click',onClick);window.removeEventListener('storage',onStorage)}}
 }

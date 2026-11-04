@@ -222,6 +222,22 @@ defmodule EvolvingMindsWeb.LabPage do
               </section>
             </aside>
           </div>
+          <div class="lab-recovery">
+            <p data-session-status role="status" class="muted">Preparing reload recovery…</p><time
+              data-session-time
+              class="muted"
+            ></time><div data-session-problem hidden class="notice">
+              <p>
+                Download the previous recovery data before resetting it. Your current experiment stays open.
+              </p><div class="library-transfer">
+                <button type="button" data-session-action="backup" class="button button-quiet">Download recovery data</button><button
+                  type="button"
+                  data-session-action="reset"
+                  class="button button-quiet"
+                >Reset unreadable recovery</button>
+              </div>
+            </div>
+          </div>
           <section class="lab-saved panel" aria-labelledby="library-heading">
             <div class="section-heading">
               <h2 id="library-heading">Your experiment library</h2><span data-library-count>0/6</span>

@@ -124,3 +124,8 @@ fișierelor partajate; noul job a trecut și un transfer real upload/download.
   Ruta principală /lab rulează direct în browser, fără socket și cookie de sesiune.
 - Operare: a fost identificat Uptime Kuma existent; integrarea canalului de
   notificare depinde de alegerea proprietarului, cerută separat.
+
+Recuperarea la reload păstrează separat, per tab, lumea curentă, fluxul aleator,
+numele, viteza și misiunea activă. Recuperarea pornește în pauză; un link partajat
+pornește întâi la pasul zero. Datele corupte nu sunt suprascrise automat și
+indisponibilitatea sessionStorage nu blochează simulatorul.

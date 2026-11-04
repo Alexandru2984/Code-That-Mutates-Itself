@@ -14,6 +14,13 @@ same workspace with an explicit explanation that live observations need internet
 5. **Remove offline files** unregisters this worker and deletes only this app's
    offline caches. The saved library remains in browser storage.
 
+The current working experiment has a separate per-tab sessionStorage checkpoint.
+World state, random stream, name, speed and mission recover paused after a reload.
+Shared condition links always start at step zero on first opening; after an actual
+change and successful checkpoint, their parameters are removed from the address
+so a reload resumes that working session. Corrupt recovery is preserved until an
+explicit reset. This per-tab checkpoint is not a portable or permanent backup.
+
 The install prompt depends on the browser/platform. Storage can be cleared by the
 browser or the owner of the device; availability is not a substitute for exporting
 important experiments. No background notifications or accounts are introduced.

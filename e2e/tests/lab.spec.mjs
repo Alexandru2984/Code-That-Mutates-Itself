@@ -82,3 +82,18 @@ test('corrupt local libraries offer exact recovery download and explicit reset',
   page.once('dialog',dialog=>dialog.accept());await page.locator('[data-entry-action=reset_library]').click();await expect(page.locator('[data-library-problem]')).not.toBeVisible();await expect(page.locator('[data-stat=tick]')).toHaveText('1');expect(await page.evaluate(()=>localStorage.getItem('unrelated-preference'))).toBe('keep');
   await page.locator('[data-action=save]').click();await expect(page.locator('.saved-experiment')).toHaveCount(1);
 });
+
+test('working sessions recover after reload and shared links start a new reproducible run',async({page})=>{
+  await page.goto('/lab');await expect(page.locator('fieldset')).toBeEnabled();await page.locator('[data-missions] summary').click();await page.locator('[data-mission-start=common-ground]').click();
+  await page.locator('[data-action=step]').click();await page.locator('[data-save-name]').fill('Session survivor');
+  await page.locator('input[name=speed]').evaluate(el=>{el.value='4';el.dispatchEvent(new Event('input',{bubbles:true}))});
+  await page.reload();await expect(page.locator('fieldset')).toBeEnabled();await expect(page.locator('[data-stat=tick]')).toHaveText('1');await expect(page.locator('[data-save-name]')).toHaveValue('Session survivor');await expect(page.locator('input[name=speed]')).toHaveValue('4');
+  await expect(page.locator('[data-mission-title]')).toHaveText('Build common ground');await expect(page.locator('[data-action=play]')).toHaveAttribute('aria-pressed','false');await expect(page.locator('.saved-experiment')).toHaveCount(0);
+  await page.goto('/lab?experiment=1&seed=shared-new&population=24&aggression=0.5&curiosity=0.5&mutation=0.12&epoch=normal');await expect(page.locator('fieldset')).toBeEnabled();await expect(page.locator('[data-stat=tick]')).toHaveText('0');await expect(page.locator('input[name=seed]')).toHaveValue('shared-new');
+  await page.locator('[data-action=step]').click();await expect.poll(()=>new URL(page.url()).searchParams.has('experiment')).toBe(false);await page.reload();await expect(page.locator('fieldset')).toBeEnabled();await expect(page.locator('[data-stat=tick]')).toHaveText('1');await expect(page.locator('input[name=seed]')).toHaveValue('shared-new');
+});
+
+test('blocked session storage leaves the private simulator usable',async({page})=>{
+  await page.addInitScript(()=>Object.defineProperty(window,'sessionStorage',{get(){throw new DOMException('Blocked','SecurityError')}}));
+  await page.goto('/lab');await expect(page.locator('fieldset')).toBeEnabled();await expect(page.locator('[data-session-status]')).toContainText('unavailable');await page.locator('[data-action=step]').click();await expect(page.locator('[data-stat=tick]')).toHaveText('1');await page.locator('[data-action=save]').click();await expect(page.locator('.saved-experiment')).toHaveCount(1)
+});

@@ -1,3 +1,4 @@
+import {downloadText as download} from './downloads'
 import {readLibrary,saveExperiment,renameExperiment,removeExperiment,undoRemoval,compareExperiments,comparisonCsv,historyCsv,LIBRARY_KEY,exportLibrary,importLibrary,rawLibraryBackup,resetUnreadableLibrary,MAX_ARCHIVE_BYTES} from './lab_library.mjs'
 
 const node=(tag,text,cls)=>{const el=document.createElement(tag);if(text!==undefined)el.textContent=text;if(cls)el.className=cls;return el}
@@ -6,7 +7,6 @@ const percent=n=>`${Math.round(n*100)}%`
 export function mountLibrary(hook){
   const library={entries:[],selected:[],removed:null}
   const root=hook.el,notice=hook.notice
-  const download=(content,name,type)=>{const url=URL.createObjectURL(new Blob([content],{type}));const link=document.createElement('a');link.href=url;link.download=name;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000)}
   const render=()=>{
     const active=document.activeElement;
     const focus=active&&root.contains(active)?{action:active.dataset.entryAction,id:active.dataset.entryId,name:active.dataset.savedName}:null;
