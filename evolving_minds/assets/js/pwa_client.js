@@ -1,3 +1,4 @@
+const observedRegistrations=new WeakSet(),observedWorkers=new WeakSet()
 let initialized=false,registration=null,installPrompt=null,busy=false,ready=false,reloading=false,updateRequested=false
 let message='Enable offline access while connected. Saved experiments stay in this browser; export a library to transfer them to another device.'
 const supported=()=>window.isSecureContext&&'serviceWorker'in navigator
@@ -31,7 +32,23 @@ export function refreshPwaPanel(){
 }
 function observe(reg){
   registration=reg
-  reg.addEventListener('updatefound',()=>{reg.installing?.addEventListener('statechange',()=>{refreshPwaPanel()})})
+  if(observedRegistrations.has(reg))return
+  observedRegistrations.add(reg)
+  const watch=()=>{
+    const worker=reg.installing
+    if(!worker||observedWorkers.has(worker))return
+    observedWorkers.add(worker)
+    worker.addEventListener('statechange',()=>{
+      if(reg.waiting)message='An update is ready. Save or export your experiment, then reload to update.'
+      refreshPwaPanel()
+    })
+  }
+  reg.addEventListener('updatefound',watch);watch()
+}
+function expectedWorker(){
+  const url=new URL(document.documentElement.dataset.workerUrl||'/service-worker',location.origin)
+  if(url.origin!==location.origin||url.pathname!=='/service-worker')throw Error('Unexpected worker URL')
+  return url.href
 }
 export function initPwa(){
   if(initialized||location.pathname.startsWith('/admin'))return
@@ -40,6 +57,7 @@ export function initPwa(){
     navigator.serviceWorker.getRegistration('/').then(async reg=>{
       if(!owns(reg))return
       observe(reg);ready=await status(reg.active);message=ready?'Your lab is ready offline on this device. Export your library periodically to keep a portable backup.':'Connect and enable offline access to refresh this device.';refreshPwaPanel()
+      if(navigator.onLine&&document.documentElement.dataset.workerUrl&&reg.active?.scriptURL!==expectedWorker())observe(await navigator.serviceWorker.register(expectedWorker(),{scope:'/',updateViaCache:'none'}))
     }).catch(()=>{})
     navigator.serviceWorker.addEventListener('controllerchange',()=>{if(updateRequested&&!reloading){reloading=true;location.reload()}})
   }
@@ -52,9 +70,7 @@ export function initPwa(){
       if(!navigator.onLine){message='Connect to the internet once to download the offline lab.';refreshPwaPanel();return}
       busy=true;message='Downloading the private lab for this device…';refreshPwaPanel()
       try{
-        const url=new URL(document.documentElement.dataset.workerUrl||'/service-worker',location.origin)
-        if(url.origin!==location.origin||url.pathname!=='/service-worker')throw Error('Unexpected worker URL')
-        const reg=await navigator.serviceWorker.register(url.href,{scope:'/',updateViaCache:'none'});observe(reg)
+        const reg=await navigator.serviceWorker.register(expectedWorker(),{scope:'/',updateViaCache:'none'});observe(reg)
         if(reg.active)await reg.update()
         if(reg.waiting){message='A new version is ready. Save your experiment, then reload to update.'}
         else{

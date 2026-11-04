@@ -42,7 +42,9 @@ non-GET requests keep normal networking behavior. Missing live data is not repla
 by a cached world. The private simulator's localStorage library is independent from
 CacheStorage; removing offline assets does not delete experiments or preferences.
 
-A new worker waits for the current one to retire. The user may explicitly reload
+Devices already enabled for offline access check the server-owned worker version
+when opening the lab online. First-time visitors download the cache only after
+choosing Enable offline lab. A new worker waits for the current one to retire. The user may explicitly reload
 to apply an update after saving or exporting the current experiment. Activation
 cleans only caches with the evolving-minds-offline- prefix. No forced update/reload
 is triggered merely by visiting the lab.

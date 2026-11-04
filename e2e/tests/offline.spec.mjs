@@ -10,19 +10,19 @@ const cachePaths=page=>page.evaluate(async()=>{
 
 test('standalone lab runs without a LiveView session or socket',async({page})=>{
   const errors=[],sockets=[];page.on('pageerror',error=>errors.push(error.message));page.on('websocket',socket=>sockets.push(socket.url()));
-  const response=await page.goto('/offline');await expect(page.locator('fieldset')).toBeEnabled();
+  const response=await page.goto('/offline');await expect(page.locator('input[name=seed]')).toBeEnabled();
   expect(response.headers()['x-offline-shell']).toBe('1');expect(await page.locator('meta[name=csrf-token]').count()).toBe(0)
   await page.locator('[data-action=step]').click();await expect(page.locator('[data-stat=tick]')).toHaveText('1');
   await page.locator('[data-action=save]').click();await expect(page.locator('.saved-experiment')).toHaveCount(1);
   expect(sockets).toEqual([]);expect(errors).toEqual([])
   await page.getByRole('link',{name:'Observatory',exact:true}).click();await expect(page.locator('.phx-connected')).toBeVisible();sockets.length=0;
-  await page.getByRole('link',{name:'Lab',exact:true}).click();await expect(page.locator('fieldset')).toBeEnabled();expect(sockets).toEqual([])
+  await page.getByRole('link',{name:'Lab',exact:true}).click();await expect(page.locator('input[name=seed]')).toBeEnabled();expect(sockets).toEqual([])
 })
 
 test('prepared lab reloads offline while private pages and live data remain uncached',async({page,context})=>{
   test.setTimeout(60_000)
   const errors=[];page.on('pageerror',error=>errors.push(error.message))
-  await page.goto('/lab');await expect(page.locator('fieldset')).toBeEnabled();await page.locator('[data-action=step]').click();await expect(page.locator('[data-stat=tick]')).toHaveText('1');await page.locator('[data-save-name]').fill('Offline survivor');await page.locator('[data-action=save]').click()
+  await page.goto('/lab');await expect(page.locator('input[name=seed]')).toBeEnabled();await page.locator('[data-action=step]').click();await expect(page.locator('[data-stat=tick]')).toHaveText('1');await page.locator('[data-save-name]').fill('Offline survivor');await page.locator('[data-action=save]').click()
   expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('evolving-minds:lab-library:v2')).entries[0].world.tick)).toBe(1);
   await page.locator('[data-enable-offline]').click();await expect(page.locator('[data-pwa-mode]')).toHaveText('Offline ready',{timeout:40_000})
   await expect.poll(()=>page.evaluate(()=>!!navigator.serviceWorker.controller)).toBe(true)
@@ -31,10 +31,20 @@ test('prepared lab reloads offline while private pages and live data remain unca
   const cachedShell=await page.evaluate(async()=>{for(const name of await caches.keys())if(name.startsWith('evolving-minds-offline-'))return(await(await caches.open(name)).match('/offline')).text()})
   expect(cachedShell).not.toContain('data-phx-session');expect(cachedShell).not.toContain('csrf-token')
   expect(await page.evaluate(async()=>[(await fetch('/admin/world')).status,(await fetch('/api/world')).status])).toEqual([200,200]);expect(await cachePaths(page)).toEqual(paths)
-  await context.setOffline(true);await page.goto('/lab');await expect(page.locator('fieldset')).toBeEnabled();await expect(page.locator('[data-offline-state]')).toContainText('You are offline');await expect(page.locator('.saved-experiment h3')).toHaveText('Offline survivor')
+  await context.setOffline(true);await page.goto('/lab');await expect(page.locator('input[name=seed]')).toBeEnabled();await expect(page.locator('[data-offline-state]')).toContainText('You are offline');await expect(page.locator('.saved-experiment h3')).toHaveText('Offline survivor')
   await page.locator('[data-action=load]').click();await expect(page.locator('[data-lab-notice]')).toContainText('loaded and paused');await expect(page.locator('[data-stat=tick]')).toHaveText('1');await page.locator('[data-action=step]').click();await expect(page.locator('[data-stat=tick]')).toHaveText('2')
-  await page.reload();await expect(page.locator('fieldset')).toBeEnabled();await expect(page.locator('.saved-experiment')).toHaveCount(1)
+  await page.reload();await expect(page.locator('input[name=seed]')).toBeEnabled();await expect(page.locator('.saved-experiment')).toHaveCount(1)
   expect(await page.evaluate(async()=>{try{await fetch('/api/world');return 'networked'}catch(_){return 'offline'}})).toBe('offline')
   await page.setViewportSize({width:360,height:900});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);expect(errors).toEqual([])
   await context.setOffline(false);await page.locator('[data-remove-offline]').click();await expect(page.locator('[data-pwa-status]')).toContainText('Offline files removed');await expect(page.locator('.saved-experiment')).toHaveCount(1);expect(await cachePaths(page)).toEqual([])
 })
+
+
+test('an offline worker update waits for approval and reloads a checkpointed experiment',async({page})=>{
+  test.setTimeout(60_000)
+  await page.goto('/lab');await expect(page.locator('input[name=seed]')).toBeEnabled();await page.locator('[data-action=step]').click();await page.locator('[data-enable-offline]').click();await expect(page.locator('[data-pwa-mode]')).toHaveText('Offline ready',{timeout:40_000});
+  // A different main-script URL exercises the browser's actual worker replacement lifecycle.
+  await page.evaluate(async()=>{await navigator.serviceWorker.register('/service-worker?v=update-lifecycle-check',{scope:'/',updateViaCache:'none'})});
+  await expect(page.locator('[data-apply-update]')).toBeVisible();await expect(page.locator('[data-stat=tick]')).toHaveText('1');
+  const navigation=page.waitForNavigation();await page.locator('[data-apply-update]').click();await navigation;await expect(page.locator('input[name=seed]')).toBeEnabled();await expect(page.locator('[data-stat=tick]')).toHaveText('1');await expect(page.locator('[data-action=play]')).toHaveAttribute('aria-pressed','false');
+});
