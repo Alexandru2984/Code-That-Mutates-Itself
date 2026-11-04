@@ -57,6 +57,10 @@ grupuri privilegiate; release-urile sunt read-only. Offsite-ul rulează separat 
 expune credențialele procesului web. Copia criptată a fost recuperată și pornită
 într-o instanță izolată; datele de producție nu au fost înlocuite.
 
+Administrarea are acum un layout adaptat mobilului și trei indicatoare pentru
+snapshot, backup local și transfer criptat. Stările lipsă, vechi sau invalide sunt
+vizibile; această verificare din aplicație nu înlocuiește alertele externe.
+
 ## Extensii ulterioare, fără a le prezenta ca livrate
 
 - Replays și serii istorice persistente, cu retenție și buget de stocare.

@@ -15,7 +15,8 @@ defmodule EvolvingMindsWeb.AdminLive do
   def mount(_params, _session, socket) do
     if connected?(socket), do: WorldPublisher.subscribe()
 
-    {:ok, refresh(socket), layout: {EvolvingMindsWeb.Layouts, :screen}}
+    {:ok, socket |> assign(:page_title, "World Administration") |> refresh(),
+     layout: {EvolvingMindsWeb.Layouts, :screen}}
   end
 
   @impl true
@@ -90,148 +91,125 @@ defmodule EvolvingMindsWeb.AdminLive do
     |> assign(:paused, World.paused?())
     |> assign(:epoch, Environment.current_epoch())
     |> assign(:all_time, EvolvingMinds.AllTimeStats.get_stats())
+    |> assign(:operations, EvolvingMindsWeb.OperationalStatus.read())
   end
+
+  defp status_label(:ok), do: "Healthy"
+  defp status_label(:stale), do: "Overdue"
+  defp status_label(:error), do: "Transfer failed"
+  defp status_label(:disabled), do: "Not configured"
+  defp status_label(:missing), do: "No record yet"
+  defp status_label(_), do: "Check required"
 
   @impl true
   def render(assigns) do
     ~H"""
-    <div class="min-h-screen w-full bg-[#050608] text-slate-300 font-sans p-6 md:p-10">
-      <div class="max-w-3xl mx-auto">
-        <header class="mb-8 flex items-center justify-between">
+    <div class="observatory admin-page">
+      <header class="site-header">
+        <a href="/" class="brand" aria-label="Evolving Minds home"><span
+          class="brand-mark"
+          aria-hidden="true"
+        >◎</span><span>Evolving <strong>Minds</strong><small>WORLD ADMINISTRATION</small></span></a><nav aria-label="Administration navigation">
+          <a href="/admin/dashboard">LiveDashboard</a><a href="/">← Observatory</a>
+        </nav>
+      </header>
+      <main id="main-content" class="observatory-main admin-main">
+        <section class="tree-intro">
+          <p class="eyebrow">God mode enabled</p><h1>World Administration</h1><p>
+            Manage the shared world and check the safety of its stored history.
+          </p>
+        </section>
+        <section class="world-metrics" aria-label="Simulation status">
           <div>
-            <h1 class="text-2xl font-black text-white">
-              World
-              <span class="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-indigo-500">
-                Administration
-              </span>
-            </h1>
-            <p class="text-[10px] text-slate-500 font-mono uppercase tracking-[0.3em] mt-1">
-              God mode enabled
-            </p>
+            <span class="metric-label">Population</span><strong>{@population}<small>/ 50</small></strong><span>living minds</span>
+          </div><div>
+            <span class="metric-label">Status</span><strong>{if @paused, do: "Paused", else: "Running"}</strong><span>shared simulation</span>
+          </div><div>
+            <span class="metric-label">Epoch</span><strong>{String.capitalize(to_string(@epoch))}</strong><span>current environment</span>
+          </div><div>
+            <span class="metric-label">Births / Deaths</span><strong>{@all_time.births}
+            <small>/ {@all_time.deaths}</small></strong><span>recorded lives</span>
           </div>
-          <div class="flex gap-3">
-            <a
-              href="/admin/dashboard"
-              class="px-4 py-2 rounded-xl border border-white/10 bg-white/[0.02] hover:bg-white/10 text-[10px] font-black text-slate-400 uppercase tracking-widest"
+        </section>
+        <section class="panel admin-operations" aria-labelledby="operations-heading">
+          <div class="section-heading">
+            <h2 id="operations-heading">Persistence & recovery</h2><span>freshness checks</span>
+          </div><div class="operations-grid">
+            <article
+              :for={
+                {key, label, explanation} <- [
+                  {:snapshot, "World snapshot", "Written about every 30 seconds."},
+                  {:local_backup, "Local backup", "Verified gzip archive on this VPS."},
+                  {:offsite, "Encrypted offsite backup", "Google Drive copy, verified by download."}
+                ]
+              }
+              id={"operation-#{key}"}
             >
-              LiveDashboard
-            </a>
-            <a
-              href="/"
-              class="px-4 py-2 rounded-xl border border-white/10 bg-white/[0.02] hover:bg-white/10 text-[10px] font-black text-slate-400 uppercase tracking-widest"
-            >
-              ← World
-            </a>
-          </div>
-        </header>
-
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-          <div class="bg-slate-900/40 border border-white/10 rounded-2xl p-4">
-            <span class="text-[8px] text-slate-500 uppercase font-black block mb-1">Population</span>
-            <span class="text-2xl font-black text-white tabular-nums">{@population}</span>
-          </div>
-          <div class="bg-slate-900/40 border border-white/10 rounded-2xl p-4">
-            <span class="text-[8px] text-slate-500 uppercase font-black block mb-1">Status</span>
-            <span class={"text-2xl font-black #{if @paused, do: "text-rose-400", else: "text-emerald-400"}"}>
-              {if @paused, do: "Paused", else: "Running"}
-            </span>
-          </div>
-          <div class="bg-slate-900/40 border border-white/10 rounded-2xl p-4">
-            <span class="text-[8px] text-slate-500 uppercase font-black block mb-1">Epoch</span>
-            <span class="text-2xl font-black text-amber-400 capitalize">{@epoch}</span>
-          </div>
-          <div class="bg-slate-900/40 border border-white/10 rounded-2xl p-4">
-            <span class="text-[8px] text-slate-500 uppercase font-black block mb-1">
-              Births / Deaths
-            </span>
-            <span class="text-2xl font-black text-white tabular-nums">
-              {@all_time.births}/{@all_time.deaths}
-            </span>
-          </div>
-        </div>
-
-        <div class="space-y-6">
-          <section class="bg-slate-900/40 border border-white/10 rounded-2xl p-6">
-            <h2 class="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-4">
-              Simulation
-            </h2>
-            <div class="flex flex-wrap gap-3">
-              <%= if @paused do %>
-                <button
-                  phx-click="resume"
-                  class="px-4 py-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 text-[10px] font-black text-emerald-400 uppercase tracking-widest"
-                >
-                  Resume World
-                </button>
-              <% else %>
-                <button
-                  phx-click="pause"
-                  class="px-4 py-2 rounded-xl border border-rose-500/30 bg-rose-500/10 hover:bg-rose-500/20 text-[10px] font-black text-rose-400 uppercase tracking-widest"
-                >
-                  Pause World
-                </button>
-              <% end %>
-              <button
+              <h3>{label}</h3><strong class={"operation-status status-#{@operations[key].status}"}>{status_label(
+                @operations[key].status
+              )}</strong><p :if={is_integer(@operations[key].age)}>
+                Last {if key == :offsite, do: "verified", else: "written"} {EvolvingMindsWeb.Observatory.age(
+                  @operations[key].age
+                )} ago
+              </p><p :if={is_nil(@operations[key].age)}>No usable timestamp available.</p><small>{explanation}</small>
+            </article>
+          </div><p class="muted">
+            Freshness thresholds: 2 minutes for snapshots, 30 hours for local archives, 8 hours for verified offsite copies. An error or overdue copy needs attention; these checks do not send external alerts.
+          </p>
+        </section>
+        <div class="admin-controls-grid">
+          <section class="panel">
+            <h2>Simulation controls</h2><p class="muted">
+              Pausing freezes actions and reproduction for everyone.
+            </p><div class="admin-actions">
+              <button :if={!@paused} phx-click="pause" class="button button-quiet">Ⅱ Pause World</button><button
+                :if={@paused}
+                phx-click="resume"
+                class="button button-primary"
+              >▶ Resume World</button><button
                 phx-click="spawn"
                 phx-value-count="1"
-                class="px-4 py-2 rounded-xl border border-cyan-500/30 bg-cyan-500/10 hover:bg-cyan-500/20 text-[10px] font-black text-cyan-400 uppercase tracking-widest"
-              >
-                Spawn 1
-              </button>
-              <button
+                class="button button-quiet"
+              >Spawn 1</button><button
                 phx-click="spawn"
                 phx-value-count="5"
-                class="px-4 py-2 rounded-xl border border-cyan-500/30 bg-cyan-500/10 hover:bg-cyan-500/20 text-[10px] font-black text-cyan-400 uppercase tracking-widest"
-              >
-                Spawn 5
-              </button>
-              <button
-                phx-click="save_snapshot"
-                class="px-4 py-2 rounded-xl border border-white/10 bg-white/[0.02] hover:bg-white/10 text-[10px] font-black text-slate-400 uppercase tracking-widest"
-              >
-                Save Snapshot
-              </button>
+                class="button button-quiet"
+              >Spawn 5</button><button phx-click="save_snapshot" class="button button-quiet">Save Snapshot</button>
             </div>
-          </section>
-
-          <section class="bg-slate-900/40 border border-white/10 rounded-2xl p-6">
-            <h2 class="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-4">
-              Epoch
-            </h2>
-            <div class="flex flex-wrap gap-3">
-              <%= for epoch <- EvolvingMinds.Environment.epochs() do %>
-                <button
-                  phx-click="set_epoch"
-                  phx-value-epoch={epoch}
-                  class={"px-4 py-2 rounded-xl border text-[10px] font-black uppercase tracking-widest #{if epoch == @epoch, do: "border-amber-500/50 bg-amber-500/20 text-amber-300", else: "border-white/10 bg-white/[0.02] hover:bg-white/10 text-slate-400"}"}
-                >
-                  {epoch}
-                </button>
-              <% end %>
-            </div>
-          </section>
-
-          <section class="bg-slate-900/40 border border-white/10 rounded-2xl p-6">
-            <h2 class="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-4">
-              Terminate a Mind
-            </h2>
-            <form phx-submit="kill" class="flex gap-3" id="kill-form">
-              <input
-                type="text"
-                name="kill[id]"
-                placeholder="Full entity id"
-                class="flex-1 h-10 rounded-xl border border-white/10 bg-black/30 px-4 text-sm text-slate-200 placeholder:text-slate-600 focus:border-rose-500/60"
-              />
+          </section><section class="panel">
+            <h2>Choose the environment</h2><p class="muted">
+              The new energy cost applies to the whole population.
+            </p><div class="admin-actions">
               <button
-                type="submit"
-                class="px-4 py-2 rounded-xl border border-rose-500/30 bg-rose-500/10 hover:bg-rose-500/20 text-[10px] font-black text-rose-400 uppercase tracking-widest"
-              >
-                Terminate
-              </button>
-            </form>
+                :for={epoch <- EvolvingMinds.Environment.epochs()}
+                phx-click="set_epoch"
+                phx-value-epoch={epoch}
+                class={"button #{if epoch == @epoch, do: "button-primary", else: "button-quiet"}"}
+                aria-pressed={to_string(epoch == @epoch)}
+              >{String.capitalize(to_string(epoch))}</button>
+            </div>
           </section>
         </div>
-      </div>
+        <section class="panel admin-terminate">
+          <h2>Terminate a mind</h2><p class="muted">
+            This ends its life in the shared world and records the cause in the ancestry book.
+          </p><form id="kill-form" phx-submit="kill">
+            <label for="kill-id">Full entity ID</label><div>
+              <input
+                id="kill-id"
+                type="text"
+                name="kill[id]"
+                maxlength="128"
+                required
+                placeholder="Full entity id"
+              /><button type="submit" class="button button-quiet">Terminate</button>
+            </div>
+          </form>
+        </section>
+        <footer class="site-footer">
+          <span>EVOLVING MINDS · ADMINISTRATION</span><a href="/">Return to the living world ↗</a>
+        </footer>
+      </main>
     </div>
     """
   end

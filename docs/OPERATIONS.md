@@ -122,6 +122,13 @@ Sanitized status is published in `/var/lib/evolving-minds-offsite/status.json`,
 readable by the app through a file-specific ACL. Credential and detailed error files
 remain private. This status and the journal do not replace external alert delivery.
 
+The authenticated `/admin/world` panel displays snapshot, local archive and offsite
+freshness. Thresholds are 120 seconds, 30 hours and 8 hours respectively. Missing,
+malformed, future-dated and failed-transfer records remain visibly unhealthy;
+no transfer logs, filenames or credentials are sent to the browser. Checks refresh
+with the admin world's normal updates. They establish freshness, not a fresh restore
+test on every page view. The offsite writer independently verifies each transfer.
+
 On suspected unauthorized control: disable public controls and admin credentials,
 restart the unit to invalidate connected sessions, preserve logs and a private
 snapshot copy, and isolate this vhost at Nginx/Cloudflare if abuse continues.
