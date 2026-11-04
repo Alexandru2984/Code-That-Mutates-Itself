@@ -106,7 +106,7 @@ defmodule EvolvingMindsWeb.AdminLive do
     ~H"""
     <div class="observatory admin-page">
       <header class="site-header">
-        <a href="/" class="brand" aria-label="Evolving Minds home"><span
+        <a href="/" class="brand"><span
           class="brand-mark"
           aria-hidden="true"
         >◎</span><span>Evolving <strong>Minds</strong><small>WORLD ADMINISTRATION</small></span></a><nav aria-label="Administration navigation">

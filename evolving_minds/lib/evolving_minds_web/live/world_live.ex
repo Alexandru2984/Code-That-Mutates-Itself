@@ -379,7 +379,7 @@ defmodule EvolvingMindsWeb.WorldLive do
       data-watchlist={Jason.encode!(@watched)}
     >
       <header class="site-header">
-        <a href="/" class="brand" aria-label="Evolving Minds home"><span
+        <a href="/" class="brand"><span
           class="brand-mark"
           aria-hidden="true"
         >◎</span><span>Evolving <strong>Minds</strong><small>THE LIVING OBSERVATORY</small></span></a>
@@ -427,6 +427,7 @@ defmodule EvolvingMindsWeb.WorldLive do
               <strong class="solari">{@summary.solari}<small>Solari</small></strong><strong class="umbra">{@summary.umbra}<small>Umbra</small></strong>
             </div><div
               class="tribe-balance"
+              role="img"
               aria-label={"Solari #{@summary.solari}, Umbra #{@summary.umbra}"}
             >
               <span style={"width: #{if @total_population > 0, do: round(@summary.solari / @total_population * 100), else: 50}%"}></span>
@@ -453,7 +454,7 @@ defmodule EvolvingMindsWeb.WorldLive do
                   phx-click="toggle_compare"
                   phx-value-id={id}
                   aria-label={"Remove #{mind.name} from comparison"}
-                >×</button>
+                ><span aria-hidden="true">×</span></button>
               </div>
               <%= if mind[:traits] do %>
                 <p><span>Energy</span><strong>{mind.energy}%</strong></p><p>
@@ -623,7 +624,7 @@ defmodule EvolvingMindsWeb.WorldLive do
                     phx-value-id={entity.id}
                     aria-label={"#{if entity.watched, do: "Unwatch", else: "Watch"} #{entity.name}"}
                     aria-pressed={to_string(entity.watched)}
-                  >{if entity.watched, do: "★", else: "☆"}</button>
+                  ><span aria-hidden="true">{if entity.watched, do: "★", else: "☆"}</span></button>
                 </div>
                 <div class="mind-caption">
                   <span>{Observatory.personality(entity.traits)}</span><code>{String.slice(
@@ -808,7 +809,7 @@ defmodule EvolvingMindsWeb.WorldLive do
                     phx-click="toggle_watch"
                     phx-value-id={id}
                     aria-label={"Unwatch #{mind.name}"}
-                  >×</button>
+                  ><span aria-hidden="true">×</span></button>
                 </div>
               </div>
             </section>
@@ -1002,7 +1003,7 @@ defmodule EvolvingMindsWeb.WorldLive do
               class="close-button"
               phx-click="toggle_about"
               aria-label="Close field guide"
-            >×</button>
+            ><span aria-hidden="true">×</span></button>
           </div><h2 id="guide-title">Welcome to a living world.</h2><p>
             You are watching a <strong>live artificial-life simulation</strong>. Every mind is an autonomous process with inherited aggression and curiosity. This is procedural behavior, not a language model.
           </p><ol class="guide-steps">
@@ -1048,7 +1049,7 @@ defmodule EvolvingMindsWeb.WorldLive do
               class="close-button"
               phx-click="close_entity"
               aria-label="Close mind dossier"
-            >×</button>
+            ><span aria-hidden="true">×</span></button>
           </div><h2 id="dossier-title">
             {if @selected, do: @selected.name, else: String.slice(@selected_id, 0, 16)}
           </h2><code class="dossier-id">{@selected_id}</code><div class="dossier-actions">

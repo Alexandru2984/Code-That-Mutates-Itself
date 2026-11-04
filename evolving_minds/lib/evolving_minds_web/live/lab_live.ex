@@ -12,7 +12,7 @@ defmodule EvolvingMindsWeb.LabLive do
     ~H"""
     <div class="observatory">
       <header class="site-header">
-        <a href="/" class="brand" aria-label="Evolving Minds home"><span
+        <a href="/" class="brand"><span
           class="brand-mark"
           aria-hidden="true"
         >◎</span><span>Evolving <strong>Minds</strong><small>THE LIVING OBSERVATORY</small></span></a><nav aria-label="Main navigation">
