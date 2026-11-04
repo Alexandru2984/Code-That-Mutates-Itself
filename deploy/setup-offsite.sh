@@ -16,7 +16,7 @@ checkpoint="$(mktemp -d "$ENV_DIR/offsite-setup.XXXXXX")"
 enabled="$(systemctl is-enabled "$TIMER" 2>/dev/null || true)"
 active=false
 if systemctl is-active --quiet "$TIMER"; then active=true; fi
-managed_files=("$ENV_DIR/backup-rclone.conf" /etc/systemd/system/"$SERVICE" /etc/systemd/system/"$TIMER" /usr/local/sbin/evolving-minds-offsite-backup)
+managed_files=("$ENV_DIR/backup-rclone.conf" /etc/systemd/system/"$SERVICE" /etc/systemd/system/"$TIMER" /usr/local/sbin/evolving-minds-offsite-backup /usr/local/libexec/evolving-minds/stage-offsite.py)
 for item in "${managed_files[@]}"; do
   if [[ -e "$item" || -L "$item" ]]; then cp -a "$item" "$checkpoint/$(basename "$item")"; fi
 done
@@ -47,6 +47,8 @@ python3 "$REPO_ROOT/deploy/provision-offsite.py" --source-config "$SOURCE_CONFIG
 setfacl -m u:evolving-minds-offsite:r-x "$BACKUP_DIR"
 setfacl -d -m u::rwx,g::---,o::---,u:evolving-minds-offsite:r-x,m::r-x "$BACKUP_DIR"
 find "$BACKUP_DIR" -maxdepth 1 -type f -name 'world-*' -exec setfacl -m u:evolving-minds-offsite:r-- {} +
+install -d -m 755 /usr/local/libexec/evolving-minds
+install -m 644 "$REPO_ROOT/deploy/stage-offsite.py" /usr/local/libexec/evolving-minds/stage-offsite.py
 install -m 755 "$REPO_ROOT/deploy/offsite-backup.sh" /usr/local/sbin/evolving-minds-offsite-backup
 python3 "$REPO_ROOT/deploy/render-unit.py" --template "$REPO_ROOT/deploy/$SERVICE" --output "$checkpoint/rendered.service" \
   --repo-root "$REPO_ROOT" --app-dir "$REPO_ROOT/evolving_minds" --env-file "$ENV_DIR/evolving-minds.env" \

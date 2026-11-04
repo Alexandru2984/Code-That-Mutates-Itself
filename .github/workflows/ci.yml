@@ -73,6 +73,9 @@ jobs:
       - name: Validate deployment scripts
         if: matrix.project == 'evolving_minds'
         run: bash -n ../deploy/*.sh
+      - name: Verify offsite archive staging boundaries
+        if: matrix.project == 'evolving_minds'
+        run: python3 -B -m unittest discover -s ../deploy -p 'test_*.py'
       - name: Install browser verification dependencies
         if: matrix.project == 'evolving_minds'
         working-directory: e2e

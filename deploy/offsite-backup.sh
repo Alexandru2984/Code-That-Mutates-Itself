@@ -49,23 +49,11 @@ remote() {
     --contimeout 10s --timeout 30s --max-transfer 16Mi --cutoff-mode hard "$@"
 }
 phase=local_archive
-archive="$(python3 - "$LOCAL_DIR" <<'PY'
-import pathlib, re, sys, time
-files=[path for path in pathlib.Path(sys.argv[1]).glob('world-*.snapshot.gz')
-       if re.fullmatch(r'world-\d{4}-\d{2}-\d{2}T\d{6}(?:\.\d+)?Z\.snapshot\.gz',path.name)
-       and path.is_file() and not path.is_symlink()]
-if not files:raise SystemExit('No local backup archive')
-latest=max(files,key=lambda path:path.stat().st_mtime)
-if time.time()-latest.stat().st_mtime>30*3600:raise SystemExit('Local archive is stale')
-if not 0<latest.stat().st_size<=8_000_000:raise SystemExit('Unexpected local archive size')
-print(latest)
-PY
-)"
-archive_name="$(basename "$archive")"
-sha256sum -c "$archive.sha256" > /dev/null
-gzip -t "$archive"
-archive_hash="$(sha256sum "$archive" | cut -d' ' -f1)"
-archive_size="$(stat -c %s "$archive")"
+# Open shared inputs once with O_NOFOLLOW, verify bounded contents and freeze
+# the exact upload bytes in this UID's private state before any network access.
+archive="$RUN_STATE/verified-upload.snapshot.gz"
+staged_metadata="$(python3 /usr/local/libexec/evolving-minds/stage-offsite.py --source "$LOCAL_DIR" --output "$archive")"
+read -r archive_name archive_hash archive_size <<< "$staged_metadata"
 printf '%s  %s\n' "$archive_hash" "$archive_name" > "$RUN_STATE/archive.sha256"
 phase=upload
 remote copyto "$archive" "$REMOTE/$archive_name"
@@ -73,7 +61,7 @@ phase=download_verify
 remote copyto "$REMOTE/$archive_name" "$RUN_STATE/roundtrip.snapshot.gz"
 cmp -s "$archive" "$RUN_STATE/roundtrip.snapshot.gz"
 gzip -t "$RUN_STATE/roundtrip.snapshot.gz"
-rm -f "$RUN_STATE/roundtrip.snapshot.gz"
+rm -f "$RUN_STATE/roundtrip.snapshot.gz" "$archive"
 phase=manifest
 remote copyto "$RUN_STATE/archive.sha256" "$REMOTE/$archive_name.sha256"
 python3 - "$RUN_STATE/latest.json" "$archive_name" "$archive_hash" "$archive_size" <<'PY'

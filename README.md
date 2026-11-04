@@ -90,6 +90,7 @@ labels still require human review; automated results do not establish WCAG confo
 
 ```bash
 node --test evolving_minds/assets/js/*.test.mjs
+python3 -B -m unittest discover -s deploy -p 'test_*.py'
 cd e2e
 npm ci --ignore-scripts
 npx playwright install chromium
