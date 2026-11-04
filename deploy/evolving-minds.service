@@ -11,7 +11,7 @@ WorkingDirectory=@APP_DIR@
 EnvironmentFile=@ENV_FILE@
 Environment=PHX_SERVER=true
 ExecStart=@REPO_ROOT@/current/bin/evolving_minds start
-ExecStop=@REPO_ROOT@/current/bin/evolving_minds stop
+KillSignal=SIGTERM
 Restart=on-failure
 RestartSec=5
 TimeoutStopSec=60
