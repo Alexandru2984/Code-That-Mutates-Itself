@@ -1,11 +1,10 @@
 import "phoenix_html"
+import {initPwa} from "./pwa_client"
 import {Socket} from "phoenix"
 import {LiveSocket} from "phoenix_live_view"
 import topbar from "../vendor/topbar"
-import {EvolutionLab} from "./lab_hook"
 
 const Hooks = {
-  EvolutionLab,
   Watchlist: {
     mounted() {
       this.storageKey = "evolving-minds:watchlist:v1"
@@ -78,3 +77,5 @@ topbar.config({barColors: {0: "#b9efd2"}, shadowColor: "rgba(0, 0, 0, .3)"})
 window.addEventListener("phx:page-loading-start", () => topbar.show(300))
 window.addEventListener("phx:page-loading-stop", () => topbar.hide())
 liveSocket.connect()
+
+initPwa()

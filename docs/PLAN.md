@@ -118,7 +118,9 @@ fișierelor partajate; noul job a trecut și un transfer real upload/download.
   variante la coliziuni de ID, refuz atomic dacă sunt depășite cele șase sloturi.
 - Recuperare pentru date locale corupte, cu descărcarea originalului și resetare
   explicită; experimentul deschis și celelalte preferințe rămân disponibile.
-- În lucru: laborator instalabil și utilizabil după reload fără internet, cu
-  stare offline clară și fără cache pentru admin, sesiuni sau lumea live.
+- Laborator instalabil și utilizabil după reload fără internet, cu activare și
+  eliminare explicită a fișierelor offline. Documentul pregătit pentru cache nu
+  conține sesiuni sau tokenuri; admin, API și observațiile live nu intră în cache.
+  Ruta principală /lab rulează direct în browser, fără socket și cookie de sesiune.
 - Operare: a fost identificat Uptime Kuma existent; integrarea canalului de
   notificare depinde de alegerea proprietarului, cerută separat.

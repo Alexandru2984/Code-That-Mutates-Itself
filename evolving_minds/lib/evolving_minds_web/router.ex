@@ -30,6 +30,10 @@ defmodule EvolvingMindsWeb.Router do
     plug EvolvingMindsWeb.CSPNonce
   end
 
+  pipeline :offline_documents do
+    plug :put_secure_browser_headers, @secure_browser_headers
+  end
+
   pipeline :api do
     plug :accepts, ["json"]
   end
@@ -40,7 +44,6 @@ defmodule EvolvingMindsWeb.Router do
     live_session :public, on_mount: [{EvolvingMindsWeb.PublicAccess, :throttle}] do
       live "/", WorldLive
       live "/tree", TreeLive
-      live "/lab", LabLive
     end
   end
 
@@ -54,6 +57,14 @@ defmodule EvolvingMindsWeb.Router do
   scope "/", EvolvingMindsWeb do
     get "/robots.txt", DiscoveryController, :robots
     get "/sitemap.xml", DiscoveryController, :sitemap
+  end
+
+  scope "/", EvolvingMindsWeb do
+    pipe_through :offline_documents
+    get "/lab", OfflineController, :show
+    get "/offline", OfflineController, :show
+    get "/service-worker.js", OfflineController, :worker
+    get "/manifest.webmanifest", OfflineController, :manifest
   end
 
   pipeline :admin do

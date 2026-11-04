@@ -1,3 +1,4 @@
+import {refreshPwaPanel} from './pwa_client'
 import {mountFieldwork} from './lab_fieldwork_ui'
 import {mountLibrary} from './lab_library_ui'
 import {createWorld,stepWorld,summarize,restoreWorld,SCENARIOS} from './lab_engine.mjs'
@@ -5,8 +6,8 @@ import {createWorld,stepWorld,summarize,restoreWorld,SCENARIOS} from './lab_engi
 export const EvolutionLab = {
   mounted() {
     this.world=createWorld();this.running=false;this.speed=2;this.selected=null;this.elapsed=0;this.last=performance.now();this.destroyedFlag=false;
-    this.canvas=this.el.querySelector('canvas');this.ctx=this.canvas.getContext('2d');
-    this.form=this.el.querySelector('form');this.el.querySelector('fieldset').disabled=false;
+    this.canvas=this.el.querySelector('canvas');this.ctx=this.canvas.getContext('2d');if(!this.ctx)throw Error('Canvas unavailable');
+    this.form=this.el.querySelector('form');
     this.readConfig=()=>Object.fromEntries(new FormData(this.form));
     this.onSubmit=e=>{e.preventDefault();this.world=createWorld(this.readConfig());this.selected=null;this.running=false;this.elapsed=0;this.render()};
     this.form.addEventListener('submit',this.onSubmit);
@@ -45,7 +46,7 @@ export const EvolutionLab = {
     this.resize=new ResizeObserver(()=>this.render());this.resize.observe(this.canvas.parentElement);
     this.animate=time=>{if(this.destroyedFlag)return;const delta=Math.min(time-this.last,250);this.last=time;if(this.running&&!document.hidden){this.elapsed+=delta;let changed=false;while(this.elapsed>=1000/this.speed){this.elapsed-=1000/this.speed;stepWorld(this.world);changed=true}if(changed)this.render()}else this.elapsed=0;this.frame=requestAnimationFrame(this.animate)};
     this.library=mountLibrary(this);this.fieldwork=mountFieldwork(this);
-    this.frame=requestAnimationFrame(this.animate);this.render();
+    this.frame=requestAnimationFrame(this.animate);this.render();refreshPwaPanel();this.el.querySelector('fieldset').disabled=false;this.el.inert=false;this.el.setAttribute('aria-busy','false');const startup=document.querySelector('[data-lab-startup]');if(startup)startup.hidden=true;
   },
   render() {
     if(!this.world.entities.length)this.running=false;

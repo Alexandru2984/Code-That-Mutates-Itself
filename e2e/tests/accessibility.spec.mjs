@@ -13,11 +13,11 @@ test('public exploration and world administration pass automated accessibility c
     reports.push({path,width,state,violations:result.violations,incomplete:result.incomplete})
     failures.push(...result.violations.map(rule=>({path,width,state,rule:rule.id,impact:rule.impact,targets:rule.nodes.map(node=>node.target)})))
   }
-  for(const path of ['/','/tree','/lab','/admin/world']){
-    await page.goto(path);await expect(page.locator('.phx-connected')).toBeVisible()
-    if(path==='/lab'){
+  for(const path of ['/','/tree','/lab','/offline','/admin/world']){
+    await page.goto(path);if(['/lab','/offline'].includes(path))await expect(page.locator('fieldset')).toBeEnabled();else await expect(page.locator('.phx-connected')).toBeVisible()
+    if(['/lab','/offline'].includes(path)){
       await expect(page.locator('fieldset')).toBeEnabled();await page.locator('[data-missions] summary').click()
-      await page.locator('[data-action=save]').click();await page.locator('[data-entry-action=compare]').click()
+      await page.locator('[data-action=save]').click();await page.locator('[data-entry-action=compare]').first().click()
       await page.locator('[data-mission-start=common-ground]').click();await page.locator('[data-share-conditions]').click()
     }
     for(const width of [360,1440]){

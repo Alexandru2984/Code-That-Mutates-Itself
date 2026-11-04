@@ -61,8 +61,22 @@ for path in ["/", "/tree", "/lab"]:
     require(headers.get("Strict-Transport-Security"), "HSTS missing")
     cookies = headers.get_all("Set-Cookie", [])
     session = next((value.lower() for value in cookies if value.startswith("_evolving_minds_key=")), "")
-    require(all(flag in session for flag in ["secure", "httponly", "samesite=lax"]), "Session cookie flags missing")
-    print(f"OK {path}: HTTPS, canonical, metadata, headers, cookie flags")
+    if path == "/lab":
+        require(not session and "csrf-token" not in meta.metas and b"data-phx-session" not in body, "Stateless lab unexpectedly carries session state")
+        print(f"OK {path}: HTTPS, canonical, metadata, headers, stateless browser simulator")
+    else:
+        require(all(flag in session for flag in ["secure", "httponly", "samesite=lax"]), "Session cookie flags missing")
+        print(f"OK {path}: HTTPS, canonical, metadata, headers, cookie flags")
+
+status, headers, body = request("/offline")
+require(status == 200 and headers.get("X-Offline-Shell") == "1", "Offline shell unavailable")
+require("analytics.micutu.com" not in headers.get("Content-Security-Policy", ""), "Offline policy permits analytics")
+require(b"csrf-token" not in body and b"data-phx-session" not in body, "Offline shell carries session state")
+status, headers, body = request("/service-worker.js")
+require(status == 200 and "no-cache" in headers.get("Cache-Control", ""), "Worker update policy missing")
+status, _, body = request("/manifest.webmanifest")
+require(status == 200 and json.loads(body).get("start_url") == "/lab", "Installation manifest invalid")
+print("OK offline shell, worker and installation manifest")
 
 status, _, body = request("/healthz")
 require(status == 200 and json.loads(body) == {"status": "ok"}, "Readiness failed")

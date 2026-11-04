@@ -1,14 +1,9 @@
-defmodule EvolvingMindsWeb.LabLive do
-  use EvolvingMindsWeb, :live_view
+defmodule EvolvingMindsWeb.LabPage do
+  use EvolvingMindsWeb, :html
 
-  @impl true
-  def mount(_params, _session, socket) do
-    {:ok, assign(socket, :page_title, "Evolution Lab"),
-     layout: {EvolvingMindsWeb.Layouts, :screen}}
-  end
+  attr :offline, :boolean, default: false
 
-  @impl true
-  def render(assigns) do
+  def page(assigns) do
     ~H"""
     <div class="observatory">
       <header class="site-header">
@@ -16,11 +11,13 @@ defmodule EvolvingMindsWeb.LabLive do
           class="brand-mark"
           aria-hidden="true"
         >◎</span><span>Evolving <strong>Minds</strong><small>THE LIVING OBSERVATORY</small></span></a><nav aria-label="Main navigation">
-          <.link navigate={~p"/"}>Observatory</.link><.link navigate={~p"/tree"}>Dynasties</.link><.link
-            navigate={~p"/lab"}
+          <a href="/">Observatory</a><a href="/tree">Dynasties</a><a
+            href="/lab"
             class="nav-active"
-          >Evolution Lab</.link>
-        </nav><span class="connection-state"><i></i>Your private experiment</span>
+          >Evolution Lab</a>
+        </nav><span class="connection-state"><i></i>{if @offline,
+          do: "Standalone private lab",
+          else: "Your private experiment"}</span>
       </header>
       <main id="main-content" class="observatory-main lab-main">
         <section class="tree-intro">
@@ -30,10 +27,22 @@ defmodule EvolvingMindsWeb.LabLive do
             A simplified, reproducible model runs privately in this browser. Experiments do not change the shared live world.
           </p>
         </section>
-        <div id="evolution-lab" phx-hook="EvolutionLab" phx-update="ignore">
-          <noscript><p class="notice">
-            Enable JavaScript to run private experiments, or return to the observatory to see the shared world.
-          </p></noscript>
+        <aside :if={@offline} class="notice offline-context" aria-labelledby="offline-context-heading">
+          <h2 id="offline-context-heading">Your lab works without a connection</h2><p data-offline-state>
+            The shared observatory needs a connection. Your experiments and saved library stay available on this device.
+          </p><a href="/" class="text-button">Try the live observatory →</a>
+        </aside>
+        <noscript><style>
+          [data-lab-startup] { display:none }
+        </style><p class="notice">
+          Enable JavaScript to run private experiments, or return to the observatory to see the shared world.
+        </p></noscript>
+        <p data-lab-startup class="muted" role="status">Preparing your private simulator…</p>
+        <div
+          id="evolution-lab"
+          inert
+          aria-busy="true"
+        >
           <div class="lab-scenarios" role="group" aria-label="Experiment presets">
             <button data-scenario="balanced"><strong>01 · A delicate balance</strong><span>Mixed personalities, normal resources.</span></button><button data-scenario="cooperation"><strong>02 · Better together</strong><span>Curious minds in a generous world.</span></button><button data-scenario="conflict"><strong>03 · Clash of strategies</strong><span>High aggression. Who survives?</span></button><button data-scenario="survival"><strong>04 · The long famine</strong><span>Scarce resources, rapid mutation.</span></button>
           </div>
@@ -273,8 +282,44 @@ defmodule EvolvingMindsWeb.LabLive do
             </p>
           </section>
         </div>
+        <section class="panel offline-tools" aria-labelledby="offline-heading">
+          <div class="section-heading">
+            <h2 id="offline-heading">Take your lab with you</h2><span data-pwa-mode>Browser edition</span>
+          </div>
+          <p class="muted">
+            Keep the private simulator, missions and saved experiments available without a connection. Live observations need internet.
+          </p>
+          <div class="library-transfer">
+            <button type="button" data-enable-offline class="button button-quiet">Enable offline lab</button><a
+              href="/offline"
+              class="button button-quiet"
+            >Open standalone lab</a><button
+              type="button"
+              data-install-app
+              hidden
+              class="button button-primary"
+            >Install app</button><button
+              type="button"
+              data-apply-update
+              hidden
+              class="button button-quiet"
+            >Reload to update</button>
+          </div>
+          <button type="button" data-remove-offline hidden class="text-button">Remove offline files</button>
+          <p data-pwa-status class="muted" role="status">
+            Enable offline access while connected. Saved experiments stay in this browser; export a library to transfer them to another device.
+          </p>
+          <p data-pwa-update-note hidden class="muted">
+            An update is ready. Save or export your current experiment before reloading.
+          </p>
+          <details>
+            <summary>Installation and storage</summary><p class="muted">
+              In a supported browser, use Install app or your browser's Add to Home Screen option. Browser storage may be cleared by the browser or device; exported library files are your portable backup.
+            </p>
+          </details>
+        </section>
         <footer class="site-footer">
-          <span>EVOLVING MINDS · EXPERIMENT, OBSERVE, DISCOVER</span><.link navigate={~p"/"}>Visit the shared world ↗</.link>
+          <span>EVOLVING MINDS · EXPERIMENT, OBSERVE, DISCOVER</span><a href="/">Visit the shared world ↗</a>
         </footer>
       </main>
     </div>
