@@ -129,3 +129,15 @@ Recuperarea la reload păstrează separat, per tab, lumea curentă, fluxul aleat
 numele, viteza și misiunea activă. Recuperarea pornește în pauză; un link partajat
 pornește întâi la pasul zero. Datele corupte nu sunt suprascrise automat și
 indisponibilitatea sessionStorage nu blochează simulatorul.
+
+Inspectorul de istoric oferă șase măsurători, selectarea unui pas prin slider sau
+click pe grafic și urmărirea celui mai recent punct. Selectarea nu derulează
+simularea și nu modifică lumea. Populațiile pe trib corespund pasului selectat;
+contoarele cumulative sunt etichetate separat. Coordonatele folosesc pașii reali,
+iar snapshoturile cu pași istorici duplicați sunt respinse.
+
+Pe mobil, populația și comenzile de rulare preced formularul; există scurtături
+pentru navigare și salvare. Misiunea aleasă strânge lista de opțiuni. Testele
+verifică disponibilitatea inputului real, nu a containerului fieldset, și includ
+mesajul pentru JavaScript dezactivat și un update real de service worker cu
+recuperarea experimentului deschis.

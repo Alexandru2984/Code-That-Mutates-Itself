@@ -2,7 +2,7 @@ import {test,expect} from '@playwright/test'
 
 test('product pages fit mobile, tablet and desktop without horizontal scrolling',async({page})=>{
   for(const path of ['/','/tree','/lab']){
-    await page.goto(path);if(path==='/lab')await expect(page.locator('fieldset')).toBeEnabled();else await expect(page.locator('.phx-connected')).toBeVisible();
+    await page.goto(path);if(path==='/lab')await expect(page.locator('input[name=seed]')).toBeEnabled();else await expect(page.locator('.phx-connected')).toBeVisible();
     for(const width of [360,390,768,1440,1920]){
       await page.setViewportSize({width,height:900});
       expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);

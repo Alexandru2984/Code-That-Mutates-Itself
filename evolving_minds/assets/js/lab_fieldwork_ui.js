@@ -3,7 +3,7 @@ import {MISSIONS,MISSION_KEY,experimentLink,readExperimentLink,missionProgress,r
 const node=(tag,text,cls)=>{const el=document.createElement(tag);if(text!==undefined)el.textContent=text;if(cls)el.className=cls;return el}
 
 export function mountFieldwork(hook){
-  const root=hook.el;let active=null,completed={},awarded=new Set(),storageWarning=false
+  const root=hook.el;let active=null,choosing=false,completed={},awarded=new Set(),storageWarning=false
   try{completed=readCompleted(localStorage)}catch(error){hook.notice(error.message)}
   const cards=root.querySelector('[data-mission-list]');cards.replaceChildren()
   for(const [index,mission]of MISSIONS.entries()){
@@ -13,6 +13,8 @@ export function mountFieldwork(hook){
     card.append(heading,description,badge,start);cards.append(card)
   }
   const update=()=>{
+    cards.hidden=!!active&&!choosing
+    root.querySelector('[data-mission-choose]').textContent=choosing?'Hide mission choices':'Choose another mission'
     for(const item of MISSIONS){const badge=root.querySelector(`[data-mission-badge="${item.id}"]`);badge.textContent=completed[item.id]||awarded.has(item.id)?'✓ Completed locally':active===item.id?'Exploring now':'Ready to explore'}
     const panel=root.querySelector('[data-active-mission]');panel.hidden=!active;if(!active)return
     const mission=MISSIONS.find(item=>item.id===active),progress=missionProgress(hook.world,active)
@@ -33,14 +35,16 @@ export function mountFieldwork(hook){
   }
   const start=id=>{
     const mission=MISSIONS.find(item=>item.id===id);if(!mission)return
-    active=id;hook.loadSnapshot(createWorld({...mission.config,seed:mission.seed}));root.querySelector('[data-save-name]').value=mission.title
+    active=id;choosing=false;hook.loadSnapshot(createWorld({...mission.config,seed:mission.seed}));root.querySelector('[data-save-name]').value=mission.title
     update();hook.notice(`${mission.title} started and paused. Run the experiment, inspect the targets, then try changing a condition.`)
     root.querySelector('[data-missions]').open=true
+    const title=root.querySelector('[data-mission-title]');title.tabIndex=-1;title.focus({preventScroll:true})
   }
   const onClick=async event=>{
     const startId=event.target.closest('[data-mission-start]')?.dataset.missionStart
     if(startId){start(startId);return}
-    if(event.target.closest('[data-mission-stop]')){active=null;update();hook.recovery?.touch();hook.notice('Mission closed. Your experiment is still here.');return}
+    if(event.target.closest('[data-mission-choose]')){choosing=!choosing;update();if(choosing)cards.querySelector('button')?.focus();return}
+    if(event.target.closest('[data-mission-stop]')){active=null;choosing=false;update();hook.recovery?.touch();hook.notice('Mission closed. Your experiment is still here.');return}
     if(event.target.closest('[data-share-conditions]')){
       try{
         const url=experimentLink(location.href,hook.world.config,active),field=root.querySelector('[data-share-link]');field.value=url;root.querySelector('[data-share-result]').hidden=false
@@ -56,5 +60,5 @@ export function mountFieldwork(hook){
     if(shared){active=shared.mission;hook.loadSnapshot(createWorld(shared.config));if(active)root.querySelector('[data-missions]').open=true;hook.notice('Shared starting conditions loaded at step zero. Run your own reproducible experiment.')}
   }catch(error){hook.notice(error.message)}
   update()
-  return {update,currentMission:()=>active,restoreMission(id){active=MISSIONS.some(item=>item.id===id)?id:null;if(active)root.querySelector('[data-missions]').open=true;update()},destroy(){root.removeEventListener('click',onClick);window.removeEventListener('storage',onStorage)}}
+  return {update,currentMission:()=>active,restoreMission(id){choosing=false;active=MISSIONS.some(item=>item.id===id)?id:null;if(active)root.querySelector('[data-missions]').open=true;update()},destroy(){root.removeEventListener('click',onClick);window.removeEventListener('storage',onStorage)}}
 }

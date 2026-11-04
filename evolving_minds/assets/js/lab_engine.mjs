@@ -95,7 +95,7 @@ export function restoreWorld(data) {
   if(new Set(entities.map(e=>e.id)).size!==entities.length)invalid();
   let previous=-1;
   const history=data.history.map(p=>{
-    if(!p||!int(p.tick,0,data.tick)||p.tick<previous||!int(p.population,0,60)||!int(p.energy,0,100)||!number(p.aggression)||!number(p.curiosity)||!int(p.generation)||!int(p.solari,0,60)||!int(p.umbra,0,60)||p.solari+p.umbra!==p.population)invalid();
+    if(!p||!int(p.tick,0,data.tick)||p.tick<=previous||!int(p.population,0,60)||!int(p.energy,0,100)||!number(p.aggression)||!number(p.curiosity)||!int(p.generation)||!int(p.solari,0,60)||!int(p.umbra,0,60)||p.solari+p.umbra!==p.population)invalid();
     previous=p.tick;return {tick:p.tick,population:p.population,energy:p.energy,aggression:p.aggression,curiosity:p.curiosity,generation:p.generation,solari:p.solari,umbra:p.umbra}
   });
   const events=data.events.map(e=>{if(!e||!int(e.tick,0,data.tick)||!text(e.text,240))invalid();return {tick:e.tick,text:e.text}});

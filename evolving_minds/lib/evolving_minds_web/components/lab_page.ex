@@ -27,6 +27,9 @@ defmodule EvolvingMindsWeb.LabPage do
             A simplified, reproducible model runs privately in this browser. Experiments do not change the shared live world.
           </p>
         </section>
+        <nav class="lab-jump-links" aria-label="Lab shortcuts">
+          <a href="#lab-map-heading">Run experiment ↓</a><a href="#controls-heading">Conditions ↓</a><a href="#library-heading">Saved experiments ↓</a>
+        </nav>
         <aside :if={@offline} class="notice offline-context" aria-labelledby="offline-context-heading">
           <h2 id="offline-context-heading">Your lab works without a connection</h2><p data-offline-state>
             The shared observatory needs a connection. Your experiments and saved library stay available on this device.
@@ -60,45 +63,46 @@ defmodule EvolvingMindsWeb.LabPage do
                   class="text-button"
                 >Close mission</button>
               </div>
+              <button type="button" data-mission-choose class="text-button">Choose another mission</button>
               <div data-mission-targets class="mission-targets"></div>
               <p data-mission-hint class="muted"></p><p data-mission-result class="mission-result">
               </p>
             </section>
           </details>
-          <div class="lab-library">
-            <div>
-              <label class="lab-save-label" for="lab-save-name">Experiment name<input
-                id="lab-save-name"
-                data-save-name
-                type="text"
-                maxlength="60"
-                placeholder="Name this experiment"
-              /></label><button data-action="save" class="button button-quiet">Save in browser</button><button
-                data-action="load"
-                class="button button-quiet"
-              >Load latest save</button><label class="button button-quiet lab-import-label">Import JSON<input
-                data-import
-                type="file"
-                accept="application/json,.json"
-                aria-label="Import experiment JSON snapshot"
-              /></label>
-              <a href="#library-heading" class="button button-quiet">View library ↓</a><button
-                type="button"
-                data-share-conditions
-                class="button button-quiet"
-              >Share starting conditions ↗</button>
-            </div><div data-share-result hidden class="lab-share-result">
-              <label for="lab-share-link">Reproducible starting conditions link</label><input
-                id="lab-share-link"
-                data-share-link
-                type="url"
-                readonly
-              /><small>This link starts a new world at step zero. Export JSON to share the current snapshot.</small>
-            </div><p data-lab-notice class="muted" role="status">
-              Save a world here, or import an exported experiment to continue its story.
-            </p>
-          </div>
           <div class="lab-layout">
+            <section class="lab-stage" aria-labelledby="lab-map-heading">
+              <div class="panel lab-map-panel">
+                <div class="section-heading">
+                  <h2 id="lab-map-heading">Your population</h2><span>Step
+                  <strong data-stat="tick">0</strong></span>
+                </div><div class="lab-canvas-wrap">
+                  <canvas role="img" aria-label="Private experiment trait map"></canvas>
+                </div><div class="map-axis"><span>↑ Curiosity</span><span>Aggression →</span></div><div class="lab-playback">
+                  <button data-action="play" class="button button-primary" aria-pressed="false">▶ Run experiment</button><button
+                    data-action="step"
+                    class="button button-quiet"
+                  >One step →</button><a href="#lab-save-name" class="button button-quiet">Save experiment ↓</a><label>Speed
+                  <input name="speed" type="range" min="1" max="10" value="2" /><output>2×</output></label>
+                </div><p data-extinct hidden class="notice">
+                  This population became extinct. Change the conditions and build a new experiment.
+                </p>
+              </div>
+              <div class="lab-metrics">
+                <div><span>Living minds</span><strong data-stat="population">24</strong></div><div>
+                  <span>Mean energy</span><strong><span data-stat="energy">100</span>%</strong>
+                </div><div><span>Generation</span><strong data-stat="generation">1</strong></div><div>
+                  <span>Births / deaths</span><strong><span data-stat="births">24</span>
+                  / <span data-stat="deaths">0</span></strong>
+                </div>
+              </div>
+              <section class="panel lab-inspector">
+                <label for="lab-inspect">Inspect a mind</label><select id="lab-inspect" data-inspect><option value="">
+                  Choose a mind to inspect
+                </option></select><p data-mind-detail class="muted">
+                  Select a dot or choose a mind above to inspect its traits.
+                </p>
+              </section>
+            </section>
             <section class="panel lab-controls" aria-labelledby="controls-heading">
               <h2 id="controls-heading">Set the conditions</h2><form id="lab-config-form">
                 <fieldset disabled>
@@ -150,47 +154,26 @@ defmodule EvolvingMindsWeb.LabPage do
                 Conditions apply when you build or reset. Presets start a fresh experiment immediately.
               </p>
             </section>
-            <section class="lab-stage" aria-labelledby="lab-map-heading">
-              <div class="panel lab-map-panel">
-                <div class="section-heading">
-                  <h2 id="lab-map-heading">Your population</h2><span>Step
-                  <strong data-stat="tick">0</strong></span>
-                </div><div class="lab-canvas-wrap">
-                  <canvas role="img" aria-label="Private experiment trait map"></canvas>
-                </div><div class="map-axis"><span>↑ Curiosity</span><span>Aggression →</span></div><div class="lab-playback">
-                  <button data-action="play" class="button button-primary" aria-pressed="false">▶ Run experiment</button><button
-                    data-action="step"
-                    class="button button-quiet"
-                  >One step →</button><label>Speed
-                  <input name="speed" type="range" min="1" max="10" value="2" /><output>2×</output></label>
-                </div><p data-extinct hidden class="notice">
-                  This population became extinct. Change the conditions and build a new experiment.
-                </p>
-              </div>
-              <div class="lab-metrics">
-                <div><span>Living minds</span><strong data-stat="population">24</strong></div><div>
-                  <span>Mean energy</span><strong><span data-stat="energy">100</span>%</strong>
-                </div><div><span>Generation</span><strong data-stat="generation">1</strong></div><div>
-                  <span>Births / deaths</span><strong><span data-stat="births">24</span>
-                  / <span data-stat="deaths">0</span></strong>
-                </div>
-              </div>
-              <section class="panel lab-inspector">
-                <label for="lab-inspect">Inspect a mind</label><select id="lab-inspect" data-inspect><option value="">
-                  Choose a mind to inspect
-                </option></select><p data-mind-detail class="muted">
-                  Select a dot or choose a mind above to inspect its traits.
-                </p>
-              </section>
-            </section>
             <aside class="lab-sidebar">
               <section class="panel">
                 <div class="section-heading">
-                  <h2>Population over time</h2><span>up to 120 steps</span>
-                </div><svg
+                  <h2>History explorer</h2><span>latest 120 measurements</span>
+                </div><label class="history-label" for="history-metric">Chart metric</label><select
+                  id="history-metric"
+                  data-history-metric
+                ><option value="population">Population</option><option value="energy">
+                  Mean energy
+                </option><option value="aggression">Mean aggression</option><option value="curiosity">
+                  Mean curiosity
+                </option><option value="solari">Solari population</option><option value="umbra">
+                  Umbra population
+                </option></select><p data-history-empty class="muted">
+                  Run at least one step to draw a history trace.
+                </p><svg
+                  data-history-chart
                   viewBox="0 0 100 100"
                   preserveAspectRatio="none"
-                  class="trend-chart"
+                  class="trend-chart lab-history-chart"
                   role="img"
                   aria-label="Experiment population history, from zero to sixty minds"
                 ><polyline
@@ -200,10 +183,49 @@ defmodule EvolvingMindsWeb.LabPage do
                   stroke="#b9efd2"
                   stroke-width="2"
                   vector-effect="non-scaling-stroke"
-                /></svg><div class="chart-legend">
-                  <span class="solari">● Solari <strong data-stat="solari">0</strong></span><span class="umbra">● Umbra
-                  <strong data-stat="umbra">0</strong></span>
-                </div><dl class="record-counters">
+                /><line
+                  data-history-marker
+                  x1="0"
+                  x2="0"
+                  y1="0"
+                  y2="100"
+                  stroke="#eef2ed"
+                  stroke-width="1"
+                  vector-effect="non-scaling-stroke"
+                /></svg><p data-history-axis class="history-axis muted"></p><label
+                  class="history-label"
+                  for="history-step"
+                >Inspect a recorded step</label><input
+                  id="history-step"
+                  data-history-step
+                  type="range"
+                  min="0"
+                  max="0"
+                  value="0"
+                  step="1"
+                /><div class="section-heading history-selection">
+                  <span data-history-caption>Step 0 · Population</span><strong data-history-value>24 minds</strong>
+                </div><button
+                  type="button"
+                  data-history-follow
+                  aria-pressed="true"
+                  class="text-button"
+                >✓ Following latest</button><dl class="history-readings">
+                  <div>
+                    <dt>Population</dt><dd data-history-stat="population">24</dd>
+                  </div><div>
+                    <dt>Mean energy</dt><dd data-history-stat="energy">100%</dd>
+                  </div><div>
+                    <dt>Aggression</dt><dd data-history-stat="aggression">50%</dd>
+                  </div><div>
+                    <dt>Curiosity</dt><dd data-history-stat="curiosity">50%</dd>
+                  </div>
+                </dl><p class="muted">
+                  Inspect measurements without rewinding the experiment. Older selections move forward when history fills.
+                </p><div class="chart-legend">
+                  <span class="solari">● Solari <strong data-history-stat="solari">0</strong></span><span class="umbra">● Umbra
+                  <strong data-history-stat="umbra">0</strong></span>
+                </div><p class="chart-label">Current experiment totals</p><dl class="record-counters">
                   <div>
                     <dt>Cooperations</dt><dd data-stat="cooperations">0</dd>
                   </div><div>
@@ -211,16 +233,54 @@ defmodule EvolvingMindsWeb.LabPage do
                   </div><div>
                     <dt>Mutations</dt><dd data-stat="mutations">0</dd>
                   </div>
-                </dl><button data-action="export" class="text-button">Export experiment JSON ↗</button><button
-                  data-action="export_csv"
-                  class="text-button"
-                >Export history CSV ↗</button>
+                </dl><div class="history-exports">
+                  <button data-action="export" class="text-button">Export experiment JSON ↗</button><button
+                    data-action="export_csv"
+                    class="text-button"
+                  >Export history CSV ↗</button>
+                </div>
               </section><section class="panel">
                 <h2>Experiment journal</h2><ol data-lab-events class="lab-events">
                   <li>Build a world to begin.</li>
                 </ol>
               </section>
             </aside>
+          </div>
+          <div class="lab-library">
+            <div class="section-heading">
+              <h2>Save & share</h2><span>Your private workspace</span>
+            </div>
+            <div>
+              <label class="lab-save-label" for="lab-save-name">Experiment name<input
+                id="lab-save-name"
+                data-save-name
+                type="text"
+                maxlength="60"
+                placeholder="Name this experiment"
+              /></label><button data-action="save" class="button button-quiet">Save in browser</button><button
+                data-action="load"
+                class="button button-quiet"
+              >Load latest save</button><label class="button button-quiet lab-import-label">Import JSON<input
+                data-import
+                type="file"
+                accept="application/json,.json"
+                aria-label="Import experiment JSON snapshot"
+              /></label>
+              <a href="#library-heading" class="button button-quiet">View library ↓</a><button
+                type="button"
+                data-share-conditions
+                class="button button-quiet"
+              >Share starting conditions ↗</button>
+            </div><div data-share-result hidden class="lab-share-result">
+              <label for="lab-share-link">Reproducible starting conditions link</label><input
+                id="lab-share-link"
+                data-share-link
+                type="url"
+                readonly
+              /><small>This link starts a new world at step zero. Export JSON to share the current snapshot.</small>
+            </div><p data-lab-notice class="muted" role="status">
+              Save a world here, or import an exported experiment to continue its story.
+            </p>
           </div>
           <div class="lab-recovery">
             <p data-session-status role="status" class="muted">Preparing reload recovery…</p><time
@@ -306,7 +366,7 @@ defmodule EvolvingMindsWeb.LabPage do
             Keep the private simulator, missions and saved experiments available without a connection. Live observations need internet.
           </p>
           <div class="library-transfer">
-            <button type="button" data-enable-offline class="button button-quiet">Enable offline lab</button><a
+            <button type="button" data-enable-offline disabled class="button button-quiet">Enable offline lab</button><a
               href="/offline"
               class="button button-quiet"
             >Open standalone lab</a><button

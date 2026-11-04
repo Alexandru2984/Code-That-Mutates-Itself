@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {createWorld,stepWorld,summarize,SCENARIOS} from './lab_engine.mjs'
+import {createWorld,stepWorld,summarize,SCENARIOS,restoreWorld} from './lab_engine.mjs'
 
 test('the same seed and controls reproduce the same experiment',()=>{
   const a=createWorld({seed:'reproducible',...SCENARIOS.cooperation}),b=createWorld({seed:'reproducible',...SCENARIOS.cooperation});
@@ -38,3 +38,8 @@ test('malformed, oversized and duplicate-identity snapshots are rejected without
   }
   const data=JSON.parse(JSON.stringify(source));data.__proto__={polluted:true};const loaded=restoreWorld(data);assert.equal(loaded.polluted,undefined);assert.equal({}.polluted,undefined);
 });
+
+test('duplicate historical steps are rejected rather than shown as ambiguous measurements',()=>{
+  const world=createWorld();world.history.push({...world.history[0]})
+  assert.throws(()=>restoreWorld(world),/not a valid/)
+})

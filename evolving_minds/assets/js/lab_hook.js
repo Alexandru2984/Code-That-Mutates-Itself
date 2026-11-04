@@ -1,3 +1,4 @@
+import {mountHistory} from './lab_history_ui'
 import {mountRecovery} from './lab_recovery_ui'
 import {downloadText} from './downloads'
 import {refreshPwaPanel} from './pwa_client'
@@ -45,12 +46,12 @@ export const EvolutionLab = {
     this.canvas.addEventListener('click',this.onCanvas);
     this.resize=new ResizeObserver(()=>this.render());this.resize.observe(this.canvas.parentElement);
     this.animate=time=>{if(this.destroyedFlag)return;const delta=Math.min(time-this.last,250);this.last=time;if(this.running&&!document.hidden){this.elapsed+=delta;let changed=false;while(this.elapsed>=1000/this.speed){this.elapsed-=1000/this.speed;stepWorld(this.world);changed=true}if(changed){this.render();this.recovery?.touch()}}else this.elapsed=0;this.frame=requestAnimationFrame(this.animate)};
-    this.library=mountLibrary(this);this.fieldwork=mountFieldwork(this);this.recovery=mountRecovery(this);
+    this.history=mountHistory(this);this.library=mountLibrary(this);this.fieldwork=mountFieldwork(this);this.recovery=mountRecovery(this);
     this.frame=requestAnimationFrame(this.animate);this.render();refreshPwaPanel();this.el.querySelector('fieldset').disabled=false;this.el.inert=false;this.el.setAttribute('aria-busy','false');const startup=document.querySelector('[data-lab-startup]');if(startup)startup.hidden=true;
   },
   render() {
     if(!this.world.entities.length)this.running=false;
-    this.fieldwork?.update();
+    this.fieldwork?.update();this.history?.update();
     const stats=summarize(this.world);
     for(const el of this.el.querySelectorAll('[data-stat]'))el.textContent=stats[el.dataset.stat]??this.world[el.dataset.stat]??0;
     const play=this.el.querySelector('[data-action=play]');play.disabled=this.world.entities.length===0;this.el.querySelector('[data-action=step]').disabled=this.world.entities.length===0;play.textContent=this.running?'Ⅱ Pause experiment':'▶ Run experiment';play.setAttribute('aria-pressed',String(this.running));
@@ -61,8 +62,7 @@ export const EvolutionLab = {
     const selected=this.world.entities.find(e=>e.id===this.selected);
     this.el.querySelector('[data-mind-detail]').textContent=selected?`${selected.name} · ${selected.tribe} · Generation ${selected.generation} · Energy ${Math.round(selected.energy)}% · Aggression ${Math.round(selected.aggression*100)}% · Curiosity ${Math.round(selected.curiosity*100)}%`:'Select a dot or choose a mind above to inspect its traits.';
     this.el.querySelector('[data-lab-events]').replaceChildren(...this.world.events.map(event=>{const li=document.createElement('li');li.textContent=`Step ${event.tick} · ${event.text}`;return li}));
-    const points=this.world.history.map((p,i)=>`${i*100/Math.max(this.world.history.length-1,1)},${95-p.population/60*85}`).join(' ');this.el.querySelector('[data-lab-chart]').setAttribute('points',points);
-    const canvas=this.canvas,context=this.ctx,rect=canvas.parentElement.getBoundingClientRect(),w=Math.max(rect.width,100),h=360,dpr=Math.min(window.devicePixelRatio||1,2);
+    const canvas=this.canvas,context=this.ctx,rect=canvas.parentElement.getBoundingClientRect(),w=Math.max(rect.width,100),h=window.matchMedia('(max-width:700px)').matches?280:360,dpr=Math.min(window.devicePixelRatio||1,2);
     canvas.width=w*dpr;canvas.height=h*dpr;canvas.style.width=`${w}px`;canvas.style.height=`${h}px`;context.setTransform(dpr,0,0,dpr,0,0);context.clearRect(0,0,w,h);
     context.strokeStyle='#ffffff12';context.lineWidth=1;context.beginPath();context.moveTo(w/2,0);context.lineTo(w/2,h);context.moveTo(0,h/2);context.lineTo(w,h/2);context.stroke();
     for(const e of this.world.entities){const x=20+e.aggression*(w-40),y=h-20-e.curiosity*(h-40);context.beginPath();context.arc(x,y,4+e.energy/100*6,0,Math.PI*2);context.fillStyle=e.tribe==='solari'?'#e5bb72':'#c5a3ed';context.globalAlpha=.45+e.energy/180;context.fill();if(e.id===this.selected){context.globalAlpha=1;context.strokeStyle='#eef2ed';context.lineWidth=2;context.stroke()}}
@@ -71,6 +71,6 @@ export const EvolutionLab = {
     this.el.querySelector('[data-extinct]').hidden=this.world.entities.length>0;
   },
   destroyed() {
-    this.destroyedFlag=true;this.recovery.destroy();this.library.destroy();this.fieldwork.destroy();cancelAnimationFrame(this.frame);this.resize.disconnect();this.el.removeEventListener('click',this.onClick);this.el.removeEventListener('input',this.onInput);this.form.removeEventListener('submit',this.onSubmit);this.canvas.removeEventListener('click',this.onCanvas);this.inspect.removeEventListener('change',this.onInspect);this.fileInput.removeEventListener('change',this.onFile);
+    this.destroyedFlag=true;this.history.destroy();this.recovery.destroy();this.library.destroy();this.fieldwork.destroy();cancelAnimationFrame(this.frame);this.resize.disconnect();this.el.removeEventListener('click',this.onClick);this.el.removeEventListener('input',this.onInput);this.form.removeEventListener('submit',this.onSubmit);this.canvas.removeEventListener('click',this.onCanvas);this.inspect.removeEventListener('change',this.onInspect);this.fileInput.removeEventListener('change',this.onFile);
   }
 }
