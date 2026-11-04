@@ -83,7 +83,7 @@ defmodule EvolvingMinds.EvolutionEngine do
     parent = weighted_parent(states)
     child_generation = parent.generation + 1
 
-    {:ok, pid} =
+    result =
       World.spawn_entity(
         traits: MutationEngine.inherit(parent.traits),
         generation: child_generation,
@@ -91,6 +91,14 @@ defmodule EvolvingMinds.EvolutionEngine do
         tribe: Map.get(parent, :tribe)
       )
 
+    case result do
+      {:ok, pid} -> record_birth(pid, parent, child_generation)
+      {:error, :max_children} -> :full
+      error -> error
+    end
+  end
+
+  defp record_birth(pid, parent, child_generation) do
     child_id = World.id_of(pid)
     child = StateStore.get_state(child_id)
 

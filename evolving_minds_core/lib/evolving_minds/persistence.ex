@@ -35,11 +35,17 @@ defmodule EvolvingMinds.Persistence do
     Process.flag(:trap_exit, true)
 
     if enabled?() do
-      restore()
-      Process.send_after(self(), :save, @save_interval_ms)
-    end
+      case restore() do
+        :corrupt ->
+          {:stop, :invalid_snapshot}
 
-    {:ok, %{}}
+        _ ->
+          Process.send_after(self(), :save, @save_interval_ms)
+          {:ok, %{}}
+      end
+    else
+      {:ok, %{}}
+    end
   end
 
   @impl true
@@ -84,12 +90,15 @@ defmodule EvolvingMinds.Persistence do
         ])
       )
 
+    ids = MapSet.new(entities, & &1.id)
+
     snapshot = %{
       version: @version,
       saved_at: DateTime.utc_now(),
       epoch: Environment.current_epoch(),
       entities: entities,
-      memories: :ets.tab2list(:entity_memories),
+      memories:
+        Enum.filter(:ets.tab2list(:entity_memories), fn {id, _} -> MapSet.member?(ids, id) end),
       all_time: EvolvingMinds.AllTimeStats.export(),
       ancestry: EvolvingMinds.Ancestry.export()
     }
@@ -98,7 +107,8 @@ defmodule EvolvingMinds.Persistence do
     tmp = file <> ".tmp"
 
     with :ok <- File.mkdir_p(Path.dirname(file)),
-         :ok <- File.write(tmp, :erlang.term_to_binary(snapshot)),
+         :ok <- File.write(tmp, :erlang.term_to_binary(snapshot), [:sync]),
+         :ok <- File.chmod(tmp, 0o600),
          :ok <- File.rename(tmp, file) do
       :ok
     else
@@ -109,8 +119,8 @@ defmodule EvolvingMinds.Persistence do
   end
 
   defp restore do
-    with {:ok, binary} <- File.read(path()),
-         %{version: @version} = snapshot <- decode(binary) do
+    with {:ok, snapshot} <- EvolvingMinds.Snapshot.read(path()),
+         true <- World.get_all_entities() == [] do
       for entity <- snapshot.entities do
         World.spawn_entity(Keyword.new(entity))
       end
@@ -139,15 +149,15 @@ defmodule EvolvingMinds.Persistence do
       {:error, :enoent} ->
         :no_snapshot
 
+      false ->
+        {:error, :world_not_empty}
+
       other ->
-        Logger.warning("World snapshot unreadable, starting fresh: #{inspect(other)}")
+        Logger.warning(
+          "World snapshot rejected (invalid data or unavailable file): #{inspect(other)}"
+        )
+
         :corrupt
     end
-  end
-
-  defp decode(binary) do
-    :erlang.binary_to_term(binary)
-  rescue
-    _ -> :corrupt
   end
 end

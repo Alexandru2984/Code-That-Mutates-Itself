@@ -5,7 +5,7 @@ defmodule EvolvingMinds.AncestryTest do
   alias EvolvingMinds.StateStore
   alias EvolvingMinds.World
 
-  defp spawn_entity(prefix, opts \\ []) do
+  defp spawn_entity(prefix, opts) do
     id = "#{prefix}-#{System.unique_integer([:positive])}"
     {:ok, pid} = World.spawn_entity(id, opts)
 

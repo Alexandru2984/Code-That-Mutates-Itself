@@ -72,7 +72,9 @@ if config_env() == :prod do
     force_ssl: [hsts: true, rewrite_on: [:x_forwarded_proto]],
     http: [
       ip: ip,
-      port: port
+      port: port,
+      http_2_options: [enabled: false],
+      websocket_options: [max_frame_size: 65_536, max_fragmented_message_size: 65_536]
     ],
     secret_key_base: secret_key_base
 

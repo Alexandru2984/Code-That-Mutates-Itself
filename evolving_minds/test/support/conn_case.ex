@@ -32,6 +32,14 @@ defmodule EvolvingMindsWeb.ConnCase do
   end
 
   setup _tags do
-    {:ok, conn: Phoenix.ConnTest.build_conn()}
+    suffix = System.unique_integer([:positive])
+
+    conn = %{
+      Phoenix.ConnTest.build_conn()
+      | remote_ip:
+          {10, div(suffix, 65_536) |> rem(256), div(suffix, 256) |> rem(256), rem(suffix, 256)}
+    }
+
+    {:ok, conn: conn}
   end
 end

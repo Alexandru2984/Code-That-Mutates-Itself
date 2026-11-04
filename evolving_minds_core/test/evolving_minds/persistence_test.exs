@@ -81,6 +81,32 @@ defmodule EvolvingMinds.PersistenceTest do
     assert Persistence.restore_now() == :corrupt
   end
 
+  test "valid ETF with invalid world data is rejected before spawning", %{tmp: tmp} do
+    before_ids = World.get_all_entities() |> Enum.sort()
+
+    snapshot = %{
+      version: 1,
+      saved_at: DateTime.utc_now(),
+      epoch: :normal,
+      entities: [%{id: "INVALID", traits: %{aggression: 99, curiosity: 0.5}, energy: 100}],
+      memories: []
+    }
+
+    File.write!(tmp, :erlang.term_to_binary(snapshot))
+    assert Persistence.restore_now() == :corrupt
+    assert World.get_all_entities() |> Enum.sort() == before_ids
+    assert Process.alive?(Process.whereis(Persistence))
+  end
+
+  test "compressed ETF and unknown atoms are rejected", %{tmp: tmp} do
+    File.write!(tmp, :erlang.term_to_binary(List.duplicate(0, 10_000), [:compressed]))
+    assert Persistence.restore_now() == :corrupt
+    atom = "snapshot_unknown_#{System.unique_integer([:positive])}"
+    File.write!(tmp, <<131, 119, byte_size(atom)>> <> atom)
+    assert Persistence.restore_now() == :corrupt
+    assert_raise ArgumentError, fn -> String.to_existing_atom(atom) end
+  end
+
   defp eventually(fun, attempts \\ 50) do
     cond do
       fun.() ->

@@ -39,7 +39,8 @@ defmodule EvolvingMinds.TribeTest do
     {attacker_id, attacker_pid} = spawn_entity("WARA", traits: @hawk, tribe: :solari)
     {target_id, _} = spawn_entity("WARB", tribe: :umbra)
 
-    for _ <- 1..5, do: send(attacker_pid, :act)
+    # Test the initial hawk; later acts can mutate aggression below 1.0.
+    send(attacker_pid, :act)
 
     assert eventually(fn -> Memory.get_memories(target_id) != [] end)
 

@@ -8,11 +8,13 @@ defmodule EvolvingMindsWeb.Endpoint do
     store: :cookie,
     key: "_evolving_minds_key",
     signing_salt: "+O3FPVK1",
-    same_site: "Lax"
+    same_site: "Lax",
+    secure: Application.compile_env(:evolving_minds, :secure_cookies, false),
+    http_only: true
   ]
 
   socket "/live", Phoenix.LiveView.Socket,
-    websocket: [connect_info: [session: @session_options]],
+    websocket: [max_frame_size: 65_536, connect_info: [session: @session_options]],
     longpoll: [connect_info: [session: @session_options]]
 
   # Serve at "/" the static files from "priv/static" directory.
@@ -37,7 +39,8 @@ defmodule EvolvingMindsWeb.Endpoint do
   plug Plug.Telemetry, event_prefix: [:phoenix, :endpoint]
 
   plug Plug.Parsers,
-    parsers: [:urlencoded, :multipart, :json],
+    parsers: [:urlencoded, :json],
+    length: 65_536,
     pass: ["*/*"],
     json_decoder: Phoenix.json_library()
 

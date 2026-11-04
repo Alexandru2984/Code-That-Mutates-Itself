@@ -37,25 +37,30 @@ defmodule EvolvingMindsWeb.AdminLive do
 
   @impl true
   def handle_event("set_epoch", %{"epoch" => epoch}, socket) do
-    epoch = String.to_existing_atom(epoch)
+    case Map.fetch(%{"normal" => :normal, "abundance" => :abundance, "famine" => :famine}, epoch) do
+      {:ok, value} ->
+        Environment.set_epoch(value)
+        {:noreply, socket |> put_flash(:info, "Epoch set to #{epoch}.") |> refresh()}
 
-    if epoch in Environment.epochs() do
-      Environment.set_epoch(epoch)
+      :error ->
+        {:noreply, put_flash(socket, :error, "Invalid epoch.")}
     end
-
-    {:noreply, socket |> put_flash(:info, "Epoch set to #{epoch}.") |> refresh()}
   end
 
   @impl true
-  def handle_event("spawn", %{"count" => count}, socket) do
-    count = String.to_integer(count)
-    for _ <- 1..count, do: World.spawn_entity()
+  def handle_event("spawn", %{"count" => count}, socket) when count in ["1", "5"] do
+    results = for _ <- 1..String.to_integer(count), do: World.spawn_entity()
+    spawned = Enum.count(results, &match?({:ok, _}, &1))
 
-    {:noreply, socket |> put_flash(:info, "Spawned #{count} minds.") |> refresh()}
+    {:noreply,
+     socket
+     |> put_flash(:info, "Spawned #{spawned} minds (population limit applies).")
+     |> refresh()}
   end
 
   @impl true
-  def handle_event("kill", %{"kill" => %{"id" => id}}, socket) do
+  def handle_event("kill", %{"kill" => %{"id" => id}}, socket)
+      when is_binary(id) and byte_size(id) <= 128 do
     id = String.trim(id)
 
     case Registry.lookup(EvolvingMinds.EntityRegistry, id) do
@@ -75,6 +80,10 @@ defmodule EvolvingMindsWeb.AdminLive do
       error -> {:noreply, put_flash(socket, :error, "Snapshot failed: #{inspect(error)}")}
     end
   end
+
+  @impl true
+  def handle_event(_event, _params, socket),
+    do: {:noreply, put_flash(socket, :error, "Invalid command.")}
 
   defp refresh(socket) do
     socket

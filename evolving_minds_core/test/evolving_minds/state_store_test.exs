@@ -76,6 +76,12 @@ defmodule EvolvingMinds.StateStoreTest do
       end)
 
     assert_receive {:written, ^writer}
+
+    on_exit(fn ->
+      if Process.alive?(writer), do: Process.exit(writer, :kill)
+      assert eventually(fn -> StateStore.get_state(entity_id) == nil end)
+    end)
+
     writer
   end
 

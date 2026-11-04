@@ -91,7 +91,7 @@ defmodule EvolvingMindsWeb.WorldLiveTest do
   end
 
   test "inject_energy is applied when public controls are enabled", %{conn: conn} do
-    {id, pid, cleanup} = spawn_test_entity("NRGY")
+    {id, _pid, cleanup} = spawn_test_entity("NRGY")
     on_exit(cleanup)
 
     {:ok, view, _html} = live(conn, "/")

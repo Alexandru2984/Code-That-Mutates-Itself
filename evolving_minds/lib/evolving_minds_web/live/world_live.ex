@@ -4,16 +4,8 @@ defmodule EvolvingMindsWeb.WorldLive do
   alias EvolvingMinds.World
   alias EvolvingMindsWeb.WorldPublisher
 
-  # Public controls are rate limited per connected client with sliding
-  # windows: @inject_limit injections per @inject_window_ms, and
-  # @spawn_limit spawned minds per @spawn_window_ms.
-  @inject_limit 5
-  @inject_window_ms 10_000
-  @spawn_limit 2
-  @spawn_window_ms 60_000
-
   @impl true
-  def mount(_params, _session, socket) do
+  def mount(_params, session, socket) do
     if connected?(socket), do: WorldPublisher.subscribe()
 
     socket =
@@ -21,8 +13,7 @@ defmodule EvolvingMindsWeb.WorldLive do
       |> assign(:query, "")
       |> assign(:sort, "energy_desc")
       |> assign(:prev_visible, [])
-      |> assign(:inject_history, [])
-      |> assign(:spawn_history, [])
+      |> assign(:visitor_key, session["visitor_key"])
       |> assign(:selected_id, nil)
       |> assign(:selected, nil)
       |> assign(:show_about, false)
@@ -39,77 +30,69 @@ defmodule EvolvingMindsWeb.WorldLive do
   end
 
   @impl true
-  def handle_event("inject_energy", %{"id" => id}, socket) do
+  def handle_event("inject_energy", %{"id" => id}, socket)
+      when is_binary(id) and byte_size(id) <= 128 do
     cond do
-      not socket.assigns.public_controls ->
+      not controls_enabled?(socket) ->
         {:noreply, socket}
 
+      is_nil(EvolvingMinds.StateStore.get_state(id)) ->
+        {:noreply, put_flash(socket, :error, "This mind is no longer alive.")}
+
+      not allowed?(socket, :inject, 5, 10_000) ->
+        {:noreply,
+         put_flash(
+           socket,
+           :error,
+           "Rate limit reached — let the minds breathe for a few seconds."
+         )}
+
       true ->
-        now = System.monotonic_time(:millisecond)
-
-        recent =
-          Enum.filter(socket.assigns.inject_history, &(now - &1 < @inject_window_ms))
-
-        if length(recent) < @inject_limit do
-          World.inject_energy(id)
-
-          socket =
-            socket
-            |> assign(:inject_history, [now | recent])
-            |> apply_snapshot(WorldPublisher.snapshot())
-
-          {:noreply, socket}
-        else
-          {:noreply,
-           socket
-           |> assign(:inject_history, recent)
-           |> put_flash(:error, "Rate limit reached — let the minds breathe for a few seconds.")}
-        end
+        World.inject_energy(id)
+        {:noreply, socket}
     end
   end
 
   @impl true
   def handle_event("spawn_mind", _params, socket) do
-    now = System.monotonic_time(:millisecond)
-    recent = Enum.filter(socket.assigns.spawn_history, &(now - &1 < @spawn_window_ms))
-
     cond do
-      not socket.assigns.public_controls ->
+      not controls_enabled?(socket) ->
         {:noreply, socket}
 
-      socket.assigns.total_population >= EvolvingMinds.EvolutionEngine.max_population() ->
-        {:noreply, put_flash(socket, :error, "The world is full — wait for natural selection.")}
-
-      length(recent) >= @spawn_limit ->
-        {:noreply,
-         socket
-         |> assign(:spawn_history, recent)
-         |> put_flash(:error, "The world needs a moment between new minds.")}
+      not allowed?(socket, :spawn, 2, 60_000) ->
+        {:noreply, put_flash(socket, :error, "The world needs a moment between new minds.")}
 
       true ->
-        {:ok, pid} = World.spawn_entity()
-        id = World.id_of(pid)
-        name = mind_name(id)
+        case World.spawn_entity() do
+          {:ok, pid} ->
+            id = World.id_of(pid)
+            name = mind_name(id)
 
-        EvolvingMinds.GlobalEvents.report_event(%{
-          type: :birth,
-          entity_id: id,
-          name: name,
-          cause: :visitor
-        })
+            EvolvingMinds.GlobalEvents.report_event(%{
+              type: :birth,
+              entity_id: id,
+              name: name,
+              cause: :visitor
+            })
 
-        socket =
-          socket
-          |> assign(:spawn_history, [now | recent])
-          |> put_flash(:info, "A new mind awakens: #{name}")
-          |> apply_snapshot(WorldPublisher.snapshot())
+            {:noreply,
+             socket
+             |> put_flash(:info, "A new mind awakens: #{name}")
+             |> apply_snapshot(WorldPublisher.snapshot())}
 
-        {:noreply, socket}
+          {:error, :max_children} ->
+            {:noreply,
+             put_flash(socket, :error, "The world is full — wait for natural selection.")}
+
+          _ ->
+            {:noreply, put_flash(socket, :error, "A mind could not awaken. Try again shortly.")}
+        end
     end
   end
 
   @impl true
-  def handle_event("select_entity", %{"id" => id}, socket) do
+  def handle_event("select_entity", %{"id" => id}, socket)
+      when is_binary(id) and byte_size(id) <= 128 do
     {:noreply, socket |> assign(:selected_id, id) |> assign(:selected, build_selected(id))}
   end
 
@@ -124,8 +107,12 @@ defmodule EvolvingMindsWeb.WorldLive do
   end
 
   @impl true
-  def handle_event("filter_entities", %{"filters" => filters}, socket) do
-    query = Map.get(filters, "query", "") |> String.trim()
+  def handle_event("filter_entities", %{"filters" => filters}, socket) when is_map(filters) do
+    query =
+      if is_binary(filters["query"]),
+        do: filters["query"] |> String.slice(0, 100) |> String.trim(),
+        else: ""
+
     sort = Map.get(filters, "sort", "energy_desc")
 
     socket =
@@ -135,6 +122,21 @@ defmodule EvolvingMindsWeb.WorldLive do
       |> refresh_stream(socket.assigns.entities, reset: true)
 
     {:noreply, socket}
+  end
+
+  @impl true
+  def handle_event(_event, _params, socket),
+    do: {:noreply, put_flash(socket, :error, "Invalid action.")}
+
+  defp controls_enabled?(socket) do
+    socket.assigns.public_controls and
+      Application.get_env(:evolving_minds, :public_controls, false) and
+      is_binary(socket.assigns.visitor_key)
+  end
+
+  defp allowed?(socket, action, limit, window) do
+    EvolvingMindsWeb.RateLimiter.allow?({action, socket.assigns.visitor_key}, limit, window) and
+      EvolvingMindsWeb.RateLimiter.allow?({:global, action}, limit * 100, window)
   end
 
   defp apply_snapshot(socket, snapshot, opts \\ []) do

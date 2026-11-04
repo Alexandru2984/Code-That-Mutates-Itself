@@ -7,19 +7,22 @@ defmodule EvolvingMindsWeb.Router do
     "content-security-policy" =>
       "default-src 'self'; " <>
         "base-uri 'self'; " <>
-        "connect-src 'self' ws: wss:; " <>
+        "connect-src 'self'; " <>
         "font-src 'self' data:; " <>
         "form-action 'self'; " <>
         "frame-ancestors 'none'; " <>
         "img-src 'self' data:; " <>
         "object-src 'none'; " <>
         "script-src 'self'; " <>
-        "style-src 'self' 'unsafe-inline'"
+        "style-src 'self' 'unsafe-inline'",
+    "permissions-policy" => "camera=(), microphone=(), geolocation=()",
+    "x-frame-options" => "DENY"
   }
 
   pipeline :browser do
     plug :accepts, ["html"]
     plug :fetch_session
+    plug EvolvingMindsWeb.ClientIdentity
     plug :fetch_live_flash
     plug :put_root_layout, html: {EvolvingMindsWeb.Layouts, :root}
     plug :protect_from_forgery
@@ -33,8 +36,10 @@ defmodule EvolvingMindsWeb.Router do
   scope "/", EvolvingMindsWeb do
     pipe_through :browser
 
-    live "/", WorldLive
-    live "/tree", TreeLive
+    live_session :public do
+      live "/", WorldLive
+      live "/tree", TreeLive
+    end
   end
 
   scope "/", EvolvingMindsWeb do
@@ -50,7 +55,12 @@ defmodule EvolvingMindsWeb.Router do
   scope "/admin" do
     pipe_through [:browser, :admin]
 
-    live "/world", EvolvingMindsWeb.AdminLive
-    live_dashboard "/dashboard", metrics: EvolvingMindsWeb.Telemetry
+    live_session :admin, on_mount: [{EvolvingMindsWeb.AdminAuth, :require_admin}] do
+      live "/world", EvolvingMindsWeb.AdminLive
+    end
+
+    live_dashboard "/dashboard",
+      metrics: EvolvingMindsWeb.Telemetry,
+      on_mount: [{EvolvingMindsWeb.AdminAuth, :require_admin}]
   end
 end
