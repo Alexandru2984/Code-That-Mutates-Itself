@@ -2,8 +2,8 @@
 #
 # Backs up the Evolving Minds world snapshot to Google Drive via rclone.
 #
-# Cron (every 6h):
-#   0 */6 * * * /home/micu/testing_elixir/deploy/backup-world.sh >> /home/micu/backups/evolving_minds/backup.log 2>&1
+# Optional off-host backup; the active VPS uses a local systemd backup timer.
+# Set WORLD_BACKUP_REMOTE explicitly before running this script.
 #
 # Keeps a rolling `world-latest.snapshot` plus timestamped copies with
 # a retention window. Fails loudly if the snapshot is missing or stale —
@@ -12,8 +12,10 @@
 # Overridable for testing: WORLD_SNAPSHOT, WORLD_BACKUP_REMOTE.
 set -euo pipefail
 
-SNAPSHOT="${WORLD_SNAPSHOT:-/home/micu/testing_elixir/evolving_minds/data/world.snapshot}"
-REMOTE="${WORLD_BACKUP_REMOTE:-gdrive:Backup_VPS_ovhcloud/evolving-minds}"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SNAPSHOT="${WORLD_SNAPSHOT:-$REPO_ROOT/evolving_minds/data/world.snapshot}"
+: "${WORLD_BACKUP_REMOTE:?Set an explicit backup remote before uploading}"
+REMOTE="$WORLD_BACKUP_REMOTE"
 KEEP_DAYS=30
 MAX_AGE_MINUTES=10
 

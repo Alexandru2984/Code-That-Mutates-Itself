@@ -77,28 +77,30 @@ Tests disable the Evolution Engine (`:start_evolution` config) so they run again
 
 ## 🚀 Production
 
-The app ships as a **mix release** managed by systemd behind Nginx (WebSocket proxying for LiveView) with TLS via Let's Encrypt/Certbot. Everything deploy-related is versioned in `deploy/`:
+The active VPS runs `evolving-minds-canary.service` from this checkout, with
+runtime configuration in `/etc/evolving-minds/evolving-minds.env` and persistent
+data in `evolving_minds/data/`. Nginx and Cloudflare protect the origin.
 
 ```bash
-./deploy/deploy.sh   # deps + prod compile + assets + release + unit sync + restart + health check
+./deploy/deploy.sh --build-only  # production build, no live service changes
+./deploy/deploy.sh               # isolated release, world backup, atomic switch, readiness, rollback
 ```
+
+Release payloads and rollback snapshots are private, ignored files in `.releases/`.
+The `current` symlink selects the active release. The deploy script preserves the
+existing systemd hardening and migrates the old release on its first run.
+See [Operations](docs/OPERATIONS.md) for deployment, rollback and incident handling.
 
 ### Backups
 
-The world snapshot is backed up to Google Drive via rclone every 6 hours (cron), with a rolling `world-latest.snapshot` plus timestamped copies kept for 30 days:
+The active `evolving-minds-backup.timer` runs daily, keeping verified gzip snapshots
+and SHA-256 checksums locally in `/srv/backups/evolving-minds` for 14 days. An
+optional off-host rclone script is included, but requires an explicit
+`WORLD_BACKUP_REMOTE`; it is not the active backup mechanism on this VPS.
 
-```bash
-./deploy/backup-world.sh   # checks freshness, uploads, prunes old copies
-```
-
-The script fails loudly if the snapshot is missing or older than 10 minutes — a stale snapshot means persistence stopped saving. To restore a world:
-
-```bash
-sudo systemctl stop evolving-minds
-rclone copyto gdrive:Backup_VPS_ovhcloud/evolving-minds/world-latest.snapshot \
-  /home/micu/testing_elixir/evolving_minds/data/world.snapshot
-sudo systemctl start evolving-minds   # boot log: "World restored: N minds"
-```
+A backup on the same VPS does not protect against loss of the entire server.
+Validate restoration and configure a separate storage destination before relying
+on this as disaster recovery. Never restore over a running simulation.
 
 ### Runtime configuration
 

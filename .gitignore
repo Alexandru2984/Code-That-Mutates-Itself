@@ -41,3 +41,8 @@ assets/node_modules/
 *.swo
 *~
 evolving_minds/data/
+
+# Local release payloads, rollback snapshots and symlinks
+.releases/
+current
+current.next
