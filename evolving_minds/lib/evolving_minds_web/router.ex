@@ -27,6 +27,7 @@ defmodule EvolvingMindsWeb.Router do
     plug :put_root_layout, html: {EvolvingMindsWeb.Layouts, :root}
     plug :protect_from_forgery
     plug :put_secure_browser_headers, @secure_browser_headers
+    plug EvolvingMindsWeb.CSPNonce
   end
 
   pipeline :api do
@@ -68,6 +69,7 @@ defmodule EvolvingMindsWeb.Router do
 
     live_dashboard "/dashboard",
       metrics: EvolvingMindsWeb.Telemetry,
+      csp_nonce_assign_key: :csp_nonce,
       on_mount: [{EvolvingMindsWeb.AdminAuth, :require_admin}]
   end
 end

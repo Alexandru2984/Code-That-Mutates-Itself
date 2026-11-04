@@ -36,6 +36,24 @@ defmodule EvolvingMindsWeb.AdminLiveTest do
     assert redirected_to(conn) =~ "/admin/dashboard/"
   end
 
+  test "dashboard bootstrap scripts use unpredictable response-specific CSP nonces", %{conn: conn} do
+    first = conn |> authed() |> get("/admin/dashboard/home")
+    second = conn |> authed() |> get("/admin/dashboard/home")
+    html = html_response(first, 200)
+    nonce = first.assigns.csp_nonce
+    assert byte_size(nonce) == 32
+    refute nonce == second.assigns.csp_nonce
+    assert [policy] = get_resp_header(first, "content-security-policy")
+    assert policy =~ "script-src 'self' 'nonce-#{nonce}'"
+    refute policy =~ "script-src 'self' 'unsafe-inline'"
+    scripts = html |> Floki.parse_document!() |> Floki.find("script:not([src])")
+    assert scripts != []
+
+    assert Enum.all?(scripts, fn {_tag, attributes, _children} ->
+             {"nonce", nonce} in attributes
+           end)
+  end
+
   test "pause and resume control the world", %{conn: conn} do
     on_exit(fn -> World.resume() end)
 
