@@ -29,6 +29,7 @@ Nu s-au făcut teste de epuizare de resurse sau atacuri destructive în producț
 | SEC-09 | Critică | Scanarea ulterioară a 335 de bloburi istorice a găsit fostul `evolving_minds/.env.prod`; SECRET_KEY_BASE de acolo coincide cu cheia runtime. Eliminarea fișierului în iunie nu a revocat cheia. Semnăturile sesiunilor și tokenurilor puteau fi falsificate de cineva cu acces la acel istoric. | Cheie nouă generată direct în fișierul protejat de runtime, fără afișare; activare la restartul controlat. Istoricul nu se rescrie implicit. Guard CI pentru fișiere de credențiale urmărite și tokenuri comune. |
 | OPS-01 | Ridicată pentru deploy | Scriptul și unitatea versionate indică vechiul director/serviciu, nu instalarea activă. Rularea lor ar putea crea un serviciu concurent sau eșua. | Deploy parametrizat pentru unitatea reală, verificări și backup înainte de restart. |
 | OPS-02 | Medie | /healthz întoarce mereu ok, chiar dacă procesele simulării lipsesc. | Readiness real, răspuns minimal și 503 la indisponibilitate. |
+| OPS-03 | Medie | Verificarea efectivă în browser a LiveDashboard a arătat că bootstrapul inline era blocat de CSP, deși răspunsul HTTP era 200. | Nonce criptografic per răspuns, integrat cu LiveDashboard și păstrat prin Nginx; fără script-src unsafe-inline. Regresie în Chromium. |
 | UX-01 | Produs | Header cu lățime minimă cumulată mare, texte de 7–9px, select fără etichete, dialoguri fără focus trap/Escape, lipsesc reconectare și accesibilitate pentru mișcare redusă. | Layout mobil și componente/feedback accesibile. |
 | UX-02 | Produs | Căutarea filtrează doar ID, genealogia încarcă întregul arbore, nu există favorite, comparație sau linkuri către un dosar. | Funcții de explorare și structură de navigare. |
 
@@ -90,12 +91,15 @@ nu fac parte din acest audit al repository-ului.
 - Admin nu mai primește scriptul injectat de analytics și are CSP exclusiv pentru
   scripturi/conexiuni proprii. Izolarea și funcționarea LiveDashboard au fost
   verificate prin sesiune autenticată, fără comenzi care modifică lumea.
+  Scripturile bootstrap ale LiveDashboard sunt autorizate prin nonce-uri noi la
+  fiecare răspuns. Proxyul păstrează politica aplicației pentru admin, cu fallback
+  strict pentru erori. Un beacon adăugat ulterior de edge este blocat de această CSP.
 - UX-01/02: observator nou, focus trap/Escape, mișcare redusă, formulare etichetate,
   căutare extinsă, favorite, comparație, vizualizări și genealogie paginată.
 
 ## Dovezi de verificare
 
-- 49 teste core, 52 teste web, 5 teste JavaScript și 5 teste Chromium: **111 trecute**.
+- 49 teste core, 53 teste web, 5 teste JavaScript și 6 teste Chromium: **113 trecute**.
 - Build de producție și mix release reușite; serviciul activ are readiness 200.
 - Pagini verificate la 360, 390, 768, 1440 și 1920 px; fără overflow orizontal.
 - Verificate în browser: favorite după reload, comparații/dosare, Escape/focus,

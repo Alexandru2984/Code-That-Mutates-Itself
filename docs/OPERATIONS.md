@@ -42,6 +42,10 @@ covered by `cd e2e && npm test`, against isolated fixtures with persistence disa
 
 Administrative pages have a separate CSP and receive no injected analytics script.
 The public analytics configuration remains restricted to the existing configured origins.
+Nginx preserves the application's CSP for admin so LiveDashboard's response-specific
+nonces reach the browser. Do not replace that policy with a static `script-src 'self'`
+header: its inline bootstrap would stop working. A strict fallback covers responses
+without an application CSP. The browser suite tests a real authenticated dashboard mount.
 
 ## Rollback
 
