@@ -124,18 +124,19 @@ See [Operations](docs/OPERATIONS.md) for deployment, rollback and incident handl
 
 ### Backups
 
-The active `evolving-minds-backup.timer` runs daily, keeping verified gzip snapshots
-and SHA-256 checksums locally in `/srv/backups/evolving-minds` for 14 days. An
-optional off-host rclone script is included, but requires an explicit
-`WORLD_BACKUP_REMOTE`; it is not the active backup mechanism on this VPS.
+The local backup timer keeps verified gzip snapshots and SHA-256 checksums in
+`/srv/backups/evolving-minds` for 14 days. The active encrypted offsite job runs
+under a separate Unix identity every six hours, uploads only a verified private
+copy to `gdrive-vps-crypt:apps/elixir.micutu.com`, and retains remote archives for
+30 days. Every upload is downloaded and compared before its manifest is published.
 
-A backup on the same VPS does not protect against loss of the entire server.
-Validate restoration and configure a separate storage destination before relying
-on this as disaster recovery. Never restore over a running simulation.
+A real remote archive has been recovered and booted in an isolated release. Full
+infrastructure recovery on another host remains a separate exercise. Never restore
+over a running simulation. Follow the [operations runbook](docs/OPERATIONS.md).
 
 ### Runtime configuration
 
-Environment-driven (`config/runtime.exs`), loaded by systemd from `.env.prod` (not committed):
+Environment-driven (`config/runtime.exs`), loaded by systemd from `/etc/evolving-minds/evolving-minds.env` (not committed):
 
 | Variable | Purpose |
 | --- | --- |
