@@ -1,3 +1,4 @@
+import {mountLibrary} from './lab_library_ui'
 import {createWorld,stepWorld,summarize,restoreWorld,SCENARIOS} from './lab_engine.mjs'
 
 export const EvolutionLab = {
@@ -20,12 +21,9 @@ export const EvolutionLab = {
       const action=e.target.closest('[data-action]')?.dataset.action;
       if(action==='play'){if(this.world.entities.length)this.running=!this.running;this.render()}
       if(action==='step'){this.running=false;stepWorld(this.world);this.render()}
-      if(action==='save'){
-        try{localStorage.setItem('evolving-minds:lab:v1',JSON.stringify(this.world));this.notice('Experiment saved in this browser. You can leave and load it later.')}catch(_){this.notice('Browser storage is unavailable. Export the experiment to keep it.')}
-      }
-      if(action==='load'){
-        try{const raw=localStorage.getItem('evolving-minds:lab:v1');if(!raw){this.notice('No saved experiment in this browser yet.');return}this.loadSnapshot(JSON.parse(raw));this.notice('Saved experiment loaded and paused.')}catch(_){this.notice('The saved experiment could not be read. Import a valid JSON snapshot instead.')}
-      }
+      if(action==='save'){try{this.library.save()}catch(error){this.notice(error.message||'Browser storage is unavailable. Export the experiment to keep it.')}}
+      if(action==='load'){try{this.library.load()}catch(error){this.notice(error.message||'The saved experiment could not be read.')}}
+      if(action==='export_csv')this.library.exportCsv();
       if(action==='export'){
         const url=URL.createObjectURL(new Blob([JSON.stringify(this.world,null,2)],{type:'application/json'}));
         const link=document.createElement('a');link.href=url;link.download='evolving-minds-lab.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000)
@@ -45,6 +43,7 @@ export const EvolutionLab = {
     this.canvas.addEventListener('click',this.onCanvas);
     this.resize=new ResizeObserver(()=>this.render());this.resize.observe(this.canvas.parentElement);
     this.animate=time=>{if(this.destroyedFlag)return;const delta=Math.min(time-this.last,250);this.last=time;if(this.running&&!document.hidden){this.elapsed+=delta;let changed=false;while(this.elapsed>=1000/this.speed){this.elapsed-=1000/this.speed;stepWorld(this.world);changed=true}if(changed)this.render()}else this.elapsed=0;this.frame=requestAnimationFrame(this.animate)};
+    this.library=mountLibrary(this);
     this.frame=requestAnimationFrame(this.animate);this.render();
   },
   render() {
@@ -69,6 +68,6 @@ export const EvolutionLab = {
     this.el.querySelector('[data-extinct]').hidden=this.world.entities.length>0;
   },
   destroyed() {
-    this.destroyedFlag=true;cancelAnimationFrame(this.frame);this.resize.disconnect();this.el.removeEventListener('click',this.onClick);this.el.removeEventListener('input',this.onInput);this.form.removeEventListener('submit',this.onSubmit);this.canvas.removeEventListener('click',this.onCanvas);this.inspect.removeEventListener('change',this.onInspect);this.fileInput.removeEventListener('change',this.onFile);
+    this.destroyedFlag=true;this.library.destroy();cancelAnimationFrame(this.frame);this.resize.disconnect();this.el.removeEventListener('click',this.onClick);this.el.removeEventListener('input',this.onInput);this.form.removeEventListener('submit',this.onSubmit);this.canvas.removeEventListener('click',this.onCanvas);this.inspect.removeEventListener('change',this.onInspect);this.fileInput.removeEventListener('change',this.onFile);
   }
 }

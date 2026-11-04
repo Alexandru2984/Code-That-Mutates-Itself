@@ -61,10 +61,15 @@ Administrarea are acum un layout adaptat mobilului și trei indicatoare pentru
 snapshot, backup local și transfer criptat. Stările lipsă, vechi sau invalide sunt
 vizibile; această verificare din aplicație nu înlocuiește alertele externe.
 
+Laboratorul păstrează șase experimente denumite și compară trei snapshoturi cu
+grafice de populație și export CSV. Salvările vechi sunt recuperate fără a le
+suprascrie; ștergerea are Undo. Datele corupte și biblioteca plină nu provoacă
+ștergeri automate. Numele sunt afișate ca text, iar CSV-ul neutralizează formulele.
+
 ## Extensii ulterioare, fără a le prezenta ca livrate
 
 - Replays și serii istorice persistente, cu retenție și buget de stocare.
-- Mai multe modele/scenarii educaționale și comparații între experimentele salvate.
+- Mai multe modele/scenarii educaționale și misiuni ghidate în laborator.
 - Misiuni de observație și realizări locale, fără a altera lumea comună.
 - Povești despre dinastii, migrații și evoluția strategiilor între epoci.
 - Partajare de dosare cu imagini sociale generate din datele publice.

@@ -59,7 +59,7 @@ jobs:
       - run: mix test --warnings-as-errors
       - name: Test the deterministic browser simulation
         if: matrix.project == 'evolving_minds'
-        run: node --test assets/js/lab_engine.test.mjs
+        run: node --test assets/js/*.test.mjs
       - name: Production assets and release
         if: matrix.project == 'evolving_minds'
         env:

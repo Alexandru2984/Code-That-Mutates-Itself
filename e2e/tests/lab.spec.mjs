@@ -20,3 +20,22 @@ test('seeded experiments export reproducibly, save, reload and resume safely',as
   await page.context().setOffline(true);await page.locator('[data-action=step]').click();await expect(page.locator('[data-stat=tick]')).toHaveText('2');await page.context().setOffline(false);
   expect(errors).toEqual([]);
 });
+
+test('named library compares snapshots, safely exports CSV and supports rename and undo',async({page})=>{
+  await page.goto('/lab');await expect(page.locator('fieldset')).toBeEnabled();
+  await expect(page.locator('[data-library-undo]')).not.toBeVisible();
+  await page.locator('[data-save-name]').fill('<img src=x onerror=alert(1)>');await page.locator('[data-action=save]').click();
+  await page.locator('[data-scenario=conflict]').click();await page.locator('[data-save-name]').fill('=Variant B');await page.locator('[data-action=save]').click();
+  await expect(page.locator('.saved-experiment')).toHaveCount(2);await expect(page.locator('[data-library-list] img')).toHaveCount(0);
+  await page.locator('.saved-experiment').nth(0).locator('[data-entry-action=compare]').click();
+  await page.locator('.saved-experiment').nth(1).locator('[data-entry-action=compare]').click();
+  await expect(page.locator('.saved-comparison-card')).toHaveCount(2);await expect(page.locator('[data-comparison-chart] polyline')).toHaveCount(2);
+  const pending=page.waitForEvent('download');await page.locator('[data-entry-action=export_compare]').click();const download=await pending;
+  const csv=await fs.readFile(await download.path(),'utf8');expect(csv).toContain('"\'=Variant B"');
+  const first=page.locator('.saved-experiment').nth(0);await first.locator('[data-saved-name]').fill('Renamed variant');await first.getByRole('button',{name:'Rename',exact:true}).click();
+  await expect(page.locator('.saved-experiment h3').first()).toHaveText('Renamed variant');
+  await page.locator('.saved-experiment').first().getByRole('button',{name:'Remove',exact:true}).click();await expect(page.locator('.saved-experiment')).toHaveCount(1);
+  await page.locator('[data-library-undo]').click();await expect(page.locator('.saved-experiment')).toHaveCount(2);
+  await page.reload();await expect(page.locator('.saved-experiment')).toHaveCount(2);
+  await page.setViewportSize({width:360,height:900});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+});

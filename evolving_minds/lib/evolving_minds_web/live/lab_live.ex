@@ -39,15 +39,22 @@ defmodule EvolvingMindsWeb.LabLive do
           </div>
           <div class="lab-library">
             <div>
-              <button data-action="save" class="button button-quiet">Save in browser</button><button
+              <label class="lab-save-label" for="lab-save-name">Experiment name<input
+                id="lab-save-name"
+                data-save-name
+                type="text"
+                maxlength="60"
+                placeholder="Name this experiment"
+              /></label><button data-action="save" class="button button-quiet">Save in browser</button><button
                 data-action="load"
                 class="button button-quiet"
-              >Load saved experiment</button><label class="button button-quiet lab-import-label">Import JSON<input
+              >Load latest save</button><label class="button button-quiet lab-import-label">Import JSON<input
                 data-import
                 type="file"
                 accept="application/json,.json"
                 aria-label="Import experiment JSON snapshot"
               /></label>
+              <a href="#library-heading" class="button button-quiet">View library ↓</a>
             </div><p data-lab-notice class="muted" role="status">
               Save a world here, or import an exported experiment to continue its story.
             </p>
@@ -165,7 +172,10 @@ defmodule EvolvingMindsWeb.LabLive do
                   </div><div>
                     <dt>Mutations</dt><dd data-stat="mutations">0</dd>
                   </div>
-                </dl><button data-action="export" class="text-button">Export experiment JSON ↗</button>
+                </dl><button data-action="export" class="text-button">Export experiment JSON ↗</button><button
+                  data-action="export_csv"
+                  class="text-button"
+                >Export history CSV ↗</button>
               </section><section class="panel">
                 <h2>Experiment journal</h2><ol data-lab-events class="lab-events">
                   <li>Build a world to begin.</li>
@@ -173,6 +183,39 @@ defmodule EvolvingMindsWeb.LabLive do
               </section>
             </aside>
           </div>
+          <section class="lab-saved panel" aria-labelledby="library-heading">
+            <div class="section-heading">
+              <h2 id="library-heading">Your experiment library</h2><span data-library-count>0/6</span>
+            </div><p class="muted">
+              Keep six named snapshots in this browser and compare up to three. Loading a snapshot leaves its saved copy unchanged.
+            </p><button data-entry-action="undo" data-library-undo hidden class="text-button">↶ Undo last removal</button><p
+              data-library-empty
+              class="muted"
+            >
+              No saved experiments yet. Name your current world and save it to begin a collection.
+            </p><div data-library-list class="saved-experiment-list"></div><section
+              data-saved-comparison
+              hidden
+              class="saved-comparison"
+            >
+              <div class="section-heading">
+                <h3>Compare saved experiments</h3><button
+                  data-entry-action="clear_compare"
+                  class="text-button"
+                >Clear selection</button>
+              </div><div data-comparison-cards class="saved-comparison-cards"></div><svg
+                data-comparison-chart
+                class="saved-comparison-chart"
+                viewBox="0 0 100 100"
+                preserveAspectRatio="none"
+                role="img"
+                aria-label="Population history of selected saved experiments"
+              ></svg><p data-comparison-axis class="muted"></p><button
+                data-entry-action="export_compare"
+                class="text-button"
+              >Export comparison CSV ↗</button>
+            </section>
+          </section>
           <section class="panel lab-method">
             <h2>How this model works</h2><p>
               Each step, minds meet one another and spend energy. Cooperation rewards curiosity; fights drain rivals. Energetic parents reproduce every two steps, passing on slightly changed traits. A world holds at most 60 minds. If none survive, the experiment ends.
