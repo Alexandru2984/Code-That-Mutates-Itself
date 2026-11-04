@@ -50,8 +50,12 @@ is triggered merely by visiting the lab.
 ## Production and verification
 
 The lab and offline shell use the application's strict CSP and receive no Nginx
-analytics transformation. The worker is served with no-cache so browsers can check
-updates. The offline shell is noindex and canonicalizes to /lab; it is not added to
+analytics transformation. The canonical worker URL has no static-file extension and includes a server-owned
+version query. It is served with browser/CDN no-store directives and updateViaCache:none.
+This avoids the four-hour browser TTL that was observed rewriting the original .js
+endpoint at Cloudflare. The legacy .js route remains only for existing registrations.
+See [Cloudflare browser TTL](https://developers.cloudflare.com/cache/how-to/edge-browser-cache-ttl/)
+and [CDN cache controls](https://developers.cloudflare.com/cache/concepts/cdn-cache-control/). The offline shell is noindex and canonicalizes to /lab; it is not added to
 the sitemap. The main lab retains canonical and social metadata.
 
 Controller tests verify stateless, visitor-independent documents and resource

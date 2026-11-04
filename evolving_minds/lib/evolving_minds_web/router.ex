@@ -63,6 +63,7 @@ defmodule EvolvingMindsWeb.Router do
     pipe_through :offline_documents
     get "/lab", OfflineController, :show
     get "/offline", OfflineController, :show
+    get "/service-worker", OfflineController, :worker
     get "/service-worker.js", OfflineController, :worker
     get "/manifest.webmanifest", OfflineController, :manifest
   end

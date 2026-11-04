@@ -51,10 +51,16 @@ defmodule EvolvingMindsWeb.OfflineControllerTest do
   test "worker has an explicit cache version, update policy and no unresolved template values", %{
     conn: conn
   } do
-    conn = get(conn, "/service-worker.js")
+    conn = get(conn, "/service-worker")
     assert response(conn, 200) =~ OfflineAssets.cache_id()
     refute conn.resp_body =~ "__OFFLINE_"
-    assert get_resp_header(conn, "cache-control") == ["no-cache, no-transform"]
+
+    assert get_resp_header(conn, "cache-control") == [
+             "no-cache, no-store, max-age=0, must-revalidate, no-transform"
+           ]
+
+    assert get_resp_header(conn, "cloudflare-cdn-cache-control") == ["no-store"]
+    assert get_resp_header(conn, "cdn-cache-control") == ["no-store"]
     assert get_resp_header(conn, "service-worker-allowed") == ["/"]
     assert conn.resp_cookies == %{}
     assert length(OfflineAssets.resources()) == 7

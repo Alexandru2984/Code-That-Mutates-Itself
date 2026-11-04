@@ -4,7 +4,10 @@ defmodule EvolvingMindsWeb.OfflineHTML do
   def page(assigns) do
     ~H"""
     <!DOCTYPE html>
-    <html lang="en">
+    <html
+      lang="en"
+      data-worker-url={"/service-worker?v=" <> EvolvingMindsWeb.OfflineAssets.cache_id()}
+    >
       <head>
         <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta name="theme-color" content="#0b1012" />

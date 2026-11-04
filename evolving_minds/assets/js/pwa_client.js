@@ -1,7 +1,7 @@
 let initialized=false,registration=null,installPrompt=null,busy=false,ready=false,reloading=false,updateRequested=false
 let message='Enable offline access while connected. Saved experiments stay in this browser; export a library to transfer them to another device.'
 const supported=()=>window.isSecureContext&&'serviceWorker'in navigator
-const owns=reg=>[reg?.active,reg?.waiting,reg?.installing].some(worker=>worker&&new URL(worker.scriptURL).pathname==='/service-worker.js')
+const owns=reg=>[reg?.active,reg?.waiting,reg?.installing].some(worker=>worker&&['/service-worker','/service-worker.js'].includes(new URL(worker.scriptURL).pathname))
 const status=(worker,action='OFFLINE_STATUS')=>new Promise(resolve=>{
   if(!worker){resolve(false);return}
   const channel=new MessageChannel(),timeout=setTimeout(()=>{channel.port1.close();resolve(false)},action==='PREPARE_OFFLINE'?30_000:2000)
@@ -52,7 +52,9 @@ export function initPwa(){
       if(!navigator.onLine){message='Connect to the internet once to download the offline lab.';refreshPwaPanel();return}
       busy=true;message='Downloading the private lab for this device…';refreshPwaPanel()
       try{
-        const reg=await navigator.serviceWorker.register('/service-worker.js',{scope:'/',updateViaCache:'none'});observe(reg)
+        const url=new URL(document.documentElement.dataset.workerUrl||'/service-worker',location.origin)
+        if(url.origin!==location.origin||url.pathname!=='/service-worker')throw Error('Unexpected worker URL')
+        const reg=await navigator.serviceWorker.register(url.href,{scope:'/',updateViaCache:'none'});observe(reg)
         if(reg.active)await reg.update()
         if(reg.waiting){message='A new version is ready. Save your experiment, then reload to update.'}
         else{

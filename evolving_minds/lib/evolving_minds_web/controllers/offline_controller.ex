@@ -36,7 +36,12 @@ defmodule EvolvingMindsWeb.OfflineController do
 
     conn
     |> put_resp_content_type("application/javascript")
-    |> put_resp_header("cache-control", "no-cache, no-transform")
+    |> put_resp_header(
+      "cache-control",
+      "no-cache, no-store, max-age=0, must-revalidate, no-transform"
+    )
+    |> put_resp_header("cdn-cache-control", "no-store")
+    |> put_resp_header("cloudflare-cdn-cache-control", "no-store")
     |> put_resp_header("service-worker-allowed", "/")
     |> send_resp(200, script)
   end
