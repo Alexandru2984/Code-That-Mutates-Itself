@@ -77,6 +77,11 @@ prin retenție sunt semnalați explicit. Rezolvarea rădăcinilor este memoizat�
 ciclurile vechi nu blochează pagina, iar structura arborelui se calculează o dată
 la încărcare/refresh în loc să fie reconstruită la fiecare căutare.
 
+Verificările de accesibilitate acoperă acum 13 combinații de pagină, stare și
+lățime. CI folosește acțiuni oficiale fixate la SHA pe Node 24 și păstrează
+capturi, rapoarte și trace-uri ale fixture-urilor timp de șapte zile. Auditul
+automat nu înlocuiește evaluarea manuală a contrastului și a tehnologiilor asistive.
+
 ## Extensii ulterioare, fără a le prezenta ca livrate
 
 - Replays și serii istorice persistente, cu retenție și buget de stocare.
