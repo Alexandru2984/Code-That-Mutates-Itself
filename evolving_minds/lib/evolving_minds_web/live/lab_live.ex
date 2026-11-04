@@ -218,7 +218,26 @@ defmodule EvolvingMindsWeb.LabLive do
               <h2 id="library-heading">Your experiment library</h2><span data-library-count>0/6</span>
             </div><p class="muted">
               Keep six named snapshots in this browser and compare up to three. Loading a snapshot leaves its saved copy unchanged.
-            </p><button data-entry-action="undo" data-library-undo hidden class="text-button">↶ Undo last removal</button><p
+            </p><div class="library-transfer">
+              <button type="button" data-entry-action="export_library" class="button button-quiet">Export library</button><label class="button button-quiet lab-import-label">Import library<input
+                data-import-library
+                type="file"
+                accept="application/json,.json"
+                aria-label="Import experiment library archive"
+              /></label><span class="muted">Up to 2 MB · imports merge, never overwrite saves</span>
+            </div>
+            <div data-library-problem hidden class="notice" role="alert">
+              <h3>Your saved library needs attention</h3><p>
+                Download the original data before resetting. The experiment currently open is still available to export as JSON.
+              </p><div class="library-transfer">
+                <button type="button" data-entry-action="backup_raw" class="button button-quiet">Download original data</button><button
+                  type="button"
+                  data-entry-action="reset_library"
+                  class="button button-quiet"
+                >Reset unreadable library</button>
+              </div>
+            </div>
+            <button data-entry-action="undo" data-library-undo hidden class="text-button">↶ Undo last removal</button><p
               data-library-empty
               class="muted"
             >

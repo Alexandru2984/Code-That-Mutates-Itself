@@ -1,4 +1,4 @@
-import {readLibrary,saveExperiment,renameExperiment,removeExperiment,undoRemoval,compareExperiments,comparisonCsv,historyCsv,LIBRARY_KEY} from './lab_library.mjs'
+import {readLibrary,saveExperiment,renameExperiment,removeExperiment,undoRemoval,compareExperiments,comparisonCsv,historyCsv,LIBRARY_KEY,exportLibrary,importLibrary,rawLibraryBackup,resetUnreadableLibrary,MAX_ARCHIVE_BYTES} from './lab_library.mjs'
 
 const node=(tag,text,cls)=>{const el=document.createElement(tag);if(text!==undefined)el.textContent=text;if(cls)el.className=cls;return el}
 const button=(text,action,id)=>{const el=node('button',text,'button button-quiet');el.type='button';el.dataset.entryAction=action;if(id)el.dataset.entryId=id;return el}
@@ -11,6 +11,8 @@ export function mountLibrary(hook){
     const active=document.activeElement;
     const focus=active&&root.contains(active)?{action:active.dataset.entryAction,id:active.dataset.entryId,name:active.dataset.savedName}:null;
     library.entries=readLibrary(localStorage)
+    root.querySelector('[data-library-problem]').hidden=true
+    root.querySelector('[data-entry-action=export_library]').disabled=false
     library.selected=library.selected.filter(id=>library.entries.some(e=>e.id===id))
     const list=root.querySelector('[data-library-list]');list.replaceChildren()
     for(const entry of library.entries){
@@ -44,11 +46,20 @@ export function mountLibrary(hook){
       if(target?.getClientRects().length)target.focus({preventScroll:true});
     }
   }
-  const refresh=()=>{try{render()}catch(error){notice(error.message||'Browser storage is unavailable. Export your experiment to keep it.')}}
+  const refresh=()=>{try{render()}catch(error){
+    root.querySelector('[data-library-problem]').hidden=false;root.querySelector('[data-library-list]').replaceChildren();root.querySelector('[data-saved-comparison]').hidden=true;root.querySelector('[data-library-empty]').hidden=true;root.querySelector('[data-library-count]').textContent='Unavailable';root.querySelector('[data-library-undo]').hidden=true;root.querySelector('[data-entry-action=export_library]').disabled=true
+    notice(error.message||'Browser storage is unavailable. Export your experiment to keep it.')
+  }}
   const onClick=event=>{
     const target=event.target.closest('[data-entry-action]');if(!target)return
     const {entryAction:action,entryId:id}=target.dataset
     try{
+      if(action==='export_library'){download(exportLibrary(localStorage),'evolving-minds-library.json','application/json');notice('Library exported. Import this file on another device to merge your saved experiments.');return}
+      if(action==='backup_raw'){download(rawLibraryBackup(localStorage),'evolving-minds-library-recovery.json','application/octet-stream');notice('Original library data downloaded. Keep it before resetting the unreadable library.');return}
+      if(action==='reset_library'){
+        if(!window.confirm('Reset the unreadable experiment library? Download its original data first if you want to recover it. Your current experiment stays open.'))return
+        resetUnreadableLibrary(localStorage);library.selected=[];library.removed=null;refresh();notice('Library reset. Your current experiment and other browser preferences are unchanged.');return
+      }
       if(action==='load'){const entry=readLibrary(localStorage).find(e=>e.id===id);if(!entry)throw Error('That experiment is no longer available.');hook.loadSnapshot(entry.world);root.querySelector('[data-save-name]').value=entry.name;notice(`Loaded ${entry.name}. The saved snapshot stays unchanged.`)}
       if(action==='compare'){if(library.selected.includes(id))library.selected=library.selected.filter(item=>item!==id);else if(library.selected.length<3)library.selected.push(id);else throw Error('Compare up to three saved experiments at a time.')}
       if(action==='rename'){renameExperiment(localStorage,id,root.querySelector(`[data-saved-name="${id}"]`).value);notice('Saved experiment renamed.')}
@@ -60,12 +71,22 @@ export function mountLibrary(hook){
     }catch(error){notice(error.message||'The library could not be updated.')}
   }
   root.addEventListener('click',onClick)
+  const archiveInput=root.querySelector('[data-import-library]')
+  const onArchive=async event=>{
+    const file=event.target.files?.[0];if(!file)return
+    try{
+      if(file.size>MAX_ARCHIVE_BYTES)throw Error('Library archives must be smaller than 2 MB.')
+      const result=importLibrary(localStorage,await file.text());refresh();notice(`Imported ${result.added} experiment${result.added===1?'':'s'}; skipped ${result.skipped} identical save${result.skipped===1?'':'s'}. Existing saves were preserved.`)
+    }catch(error){notice(error.message||'This library could not be imported. Existing saves have not been changed.')}
+    event.target.value=''
+  }
+  archiveInput.addEventListener('change',onArchive)
   const onStorage=event=>{if(event.key===LIBRARY_KEY||event.key===null)refresh()};window.addEventListener('storage',onStorage)
   refresh()
   return {
     save(){saveExperiment(localStorage,hook.world,root.querySelector('[data-save-name]').value);refresh();notice('Experiment saved in this browser. Select saved snapshots below to compare them.')},
     load(){const entry=readLibrary(localStorage)[0];if(!entry){notice('No saved experiment in this browser yet.');return}hook.loadSnapshot(entry.world);root.querySelector('[data-save-name]').value=entry.name;notice('Saved experiment loaded and paused.')},
     exportCsv(){download(historyCsv(hook.world,root.querySelector('[data-save-name]').value),'evolving-minds-history.csv','text/csv;charset=utf-8')},
-    destroy(){root.removeEventListener('click',onClick);window.removeEventListener('storage',onStorage)}
+    destroy(){root.removeEventListener('click',onClick);archiveInput.removeEventListener('change',onArchive);window.removeEventListener('storage',onStorage)}
   }
 }

@@ -61,3 +61,24 @@ test('guided missions track real progress and shared links reproduce starting co
   await second.setViewportSize({width:360,height:900});expect(await second.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   await second.close();expect(errors).toEqual([]);
 });
+
+
+test('library archives transfer to another browser and invalid imports preserve saved worlds',async({page,browser})=>{
+  await page.goto('/lab');await expect(page.locator('fieldset')).toBeEnabled();await page.locator('[data-save-name]').fill('Portable collection');await page.locator('[data-action=save]').click();
+  const pending=page.waitForEvent('download');await page.locator('[data-entry-action=export_library]').click();const archive=await pending;const buffer=await fs.readFile(await archive.path());
+  const other=await browser.newContext();const target=await other.newPage();await target.goto('http://127.0.0.1:4003/lab');await expect(target.locator('fieldset')).toBeEnabled();
+  const upload=()=>target.locator('[data-import-library]').setInputFiles({name:'collection.json',mimeType:'application/json',buffer});
+  await upload();await expect(target.locator('.saved-experiment h3')).toHaveText('Portable collection');
+  await upload();await expect(target.locator('.saved-experiment')).toHaveCount(1);await expect(target.locator('[data-lab-notice]')).toContainText('skipped 1');
+  await target.locator('[data-import-library]').setInputFiles({name:'broken.json',mimeType:'application/json',buffer:Buffer.from('broken')});await expect(target.locator('[data-lab-notice]')).toContainText('not a valid');await expect(target.locator('.saved-experiment')).toHaveCount(1);
+  await target.setViewportSize({width:360,height:900});expect(await target.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await other.close();
+});
+
+test('corrupt local libraries offer exact recovery download and explicit reset',async({page})=>{
+  await page.addInitScript(()=>{localStorage.setItem('evolving-minds:lab-library:v2','corrupt original');localStorage.setItem('unrelated-preference','keep')});
+  await page.goto('/lab');await expect(page.locator('fieldset')).toBeEnabled();await expect(page.locator('[data-library-problem]')).toBeVisible();await page.locator('[data-action=step]').click();
+  const pending=page.waitForEvent('download');await page.locator('[data-entry-action=backup_raw]').click();const original=await pending;expect(await fs.readFile(await original.path(),'utf8')).toBe('corrupt original');
+  page.once('dialog',dialog=>dialog.dismiss());await page.locator('[data-entry-action=reset_library]').click();await expect(page.locator('[data-library-problem]')).toBeVisible();
+  page.once('dialog',dialog=>dialog.accept());await page.locator('[data-entry-action=reset_library]').click();await expect(page.locator('[data-library-problem]')).not.toBeVisible();await expect(page.locator('[data-stat=tick]')).toHaveText('1');expect(await page.evaluate(()=>localStorage.getItem('unrelated-preference'))).toBe('keep');
+  await page.locator('[data-action=save]').click();await expect(page.locator('.saved-experiment')).toHaveCount(1);
+});

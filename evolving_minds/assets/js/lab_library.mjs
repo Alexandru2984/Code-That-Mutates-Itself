@@ -3,6 +3,9 @@ import {restoreWorld,summarize} from './lab_engine.mjs'
 export const LIBRARY_KEY='evolving-minds:lab-library:v2'
 export const LIBRARY_LIMIT=6
 const MAX_BYTES=1_500_000
+export const MAX_ARCHIVE_BYTES=2_000_000
+const bytes=text=>new TextEncoder().encode(text).length
+const get=(storage,key)=>{try{return storage.getItem(key)}catch(_){throw Error('Browser storage is unavailable. Export your current experiment as JSON to keep it.')}}
 const invalid=()=>{throw Error('The saved experiment library could not be read. Existing data has not been changed.')}
 const label=(name,world)=>String(name||'').trim().slice(0,60)||`${world.config.seed} · Step ${world.tick}`.slice(0,60)
 const entryCopy=entry=>{
@@ -11,13 +14,13 @@ const entryCopy=entry=>{
   return {id:entry.id,name:entry.name,savedAt:entry.savedAt,world:restoreWorld(entry.world)}
 }
 export function readLibrary(storage){
-  const raw=storage.getItem(LIBRARY_KEY)
+  const raw=get(storage,LIBRARY_KEY)
   if(raw===null){
-    const legacy=storage.getItem('evolving-minds:lab:v1');if(legacy===null)return []
+    const legacy=get(storage,'evolving-minds:lab:v1');if(legacy===null)return []
     if(legacy.length>512000)invalid()
     try{return [{id:'legacy-save',name:'Recovered experiment',savedAt:null,world:restoreWorld(JSON.parse(legacy))}]}catch(_){invalid()}
   }
-  if(raw.length>MAX_BYTES)invalid()
+  if(raw.length>MAX_BYTES||bytes(raw)>MAX_BYTES)invalid()
   try{
     const data=JSON.parse(raw)
     if(data.version!==2||!Array.isArray(data.entries)||data.entries.length>LIBRARY_LIMIT)invalid()
@@ -28,8 +31,8 @@ export function readLibrary(storage){
 }
 function write(storage,entries){
   const raw=JSON.stringify({version:2,entries:entries.map(entryCopy)})
-  if(new TextEncoder().encode(raw).length>MAX_BYTES)throw Error('This experiment library is too large. Export or remove an experiment first.')
-  storage.setItem(LIBRARY_KEY,raw)
+  if(bytes(raw)>MAX_BYTES)throw Error('This experiment library is too large. Export or remove an experiment first.')
+  try{storage.setItem(LIBRARY_KEY,raw)}catch(_){throw Error('The library could not be saved in this browser. Export your experiment or library before freeing browser storage.')}
   return entries
 }
 export function saveExperiment(storage,world,name){
@@ -70,3 +73,43 @@ const row=(entry,point)=>[entry.name,entry.world.config.seed,entry.world.config.
 const csv=rows=>'\ufeff'+[columns,...rows].map(values=>values.map(cell).join(',')).join('\r\n')+'\r\n'
 export function historyCsv(world,name){const snapshot=restoreWorld(world);const entry={name:label(name,snapshot),world:snapshot};return csv(snapshot.history.map(point=>row(entry,point)))}
 export function comparisonCsv(entries,ids){return csv(compareExperiments(entries,ids).map(entry=>row(entry,entry.summary)))}
+
+// Archive import is a merge: all entries validate before a single atomic write.
+export function exportLibrary(storage){
+  return JSON.stringify({format:'evolving-minds-library',version:2,entries:readLibrary(storage)})
+}
+export function parseLibraryArchive(raw){
+  if(typeof raw!=='string'||raw.length>MAX_ARCHIVE_BYTES||bytes(raw)>MAX_ARCHIVE_BYTES)throw Error('Library archives must be smaller than 2 MB.')
+  try{
+    const data=JSON.parse(raw)
+    if(!data||data.version!==2||(data.format!==undefined&&data.format!=='evolving-minds-library')||!Array.isArray(data.entries)||data.entries.length>LIBRARY_LIMIT)throw Error()
+    const entries=data.entries.map(entryCopy)
+    if(new Set(entries.map(entry=>entry.id)).size!==entries.length)throw Error()
+    return entries
+  }catch(_){throw Error('This is not a valid experiment library archive. Existing saves have not been changed.')}
+}
+export function importLibrary(storage,raw){
+  const incoming=parseLibraryArchive(raw),existing=readLibrary(storage)
+  const signature=entry=>JSON.stringify([entry.name,entry.savedAt,entry.world])
+  const signatures=new Set(existing.map(signature)),ids=new Set(existing.map(entry=>entry.id)),added=[]
+  let skipped=0
+  for(const entry of incoming){
+    const key=signature(entry)
+    if(signatures.has(key)){skipped++;continue}
+    if(ids.has(entry.id))entry.id=globalThis.crypto.randomUUID()
+    ids.add(entry.id);signatures.add(key);added.push(entry)
+  }
+  if(existing.length+added.length>LIBRARY_LIMIT)throw Error(`This import needs ${existing.length+added.length} slots. Your library holds ${LIBRARY_LIMIT}; export or remove a save first. Existing saves have not been changed.`)
+  if(added.length)write(storage,[...added,...existing])
+  return {added:added.length,skipped}
+}
+export function rawLibraryBackup(storage){
+  return get(storage,LIBRARY_KEY)??get(storage,'evolving-minds:lab:v1')??''
+}
+export function resetUnreadableLibrary(storage){
+  // A different tab may already have repaired the data since the warning appeared.
+  let readable=false;try{readLibrary(storage);readable=true}catch(_){}
+  if(readable)throw Error('The library is readable again. Refresh before changing any saved data.')
+  // Reset only this application's library key. The legacy save remains intact.
+  return write(storage,[])
+}

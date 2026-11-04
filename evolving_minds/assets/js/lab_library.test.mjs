@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {createWorld,stepWorld} from './lab_engine.mjs'
-import {LIBRARY_KEY,LIBRARY_LIMIT,readLibrary,saveExperiment,renameExperiment,removeExperiment,undoRemoval,compareExperiments,historyCsv,comparisonCsv} from './lab_library.mjs'
+import {LIBRARY_KEY,LIBRARY_LIMIT,readLibrary,saveExperiment,renameExperiment,removeExperiment,undoRemoval,compareExperiments,historyCsv,comparisonCsv,exportLibrary,importLibrary,parseLibraryArchive,rawLibraryBackup,resetUnreadableLibrary} from './lab_library.mjs'
 const storage=()=>{const values=new Map();return {getItem:key=>values.get(key)??null,setItem:(key,value)=>values.set(key,String(value)),values}}
 
 test('legacy saves remain recoverable and are not overwritten by the new library',()=>{
@@ -34,3 +34,28 @@ test('CSV exports escape spreadsheet formulas and preserve quoted labels',()=>{
   assert.equal(compareExperiments(readLibrary(local),ids).length,3);
   assert.equal(comparisonCsv(readLibrary(local),ids).split('\r\n').filter(Boolean).length,4);
 });
+
+test('portable archives merge across devices, skip duplicates and preserve conflicting identities',()=>{
+  const original=storage(),destination=storage();const saved=saveExperiment(original,createWorld({seed:'portable'}),'Portable')
+  const archive=exportLibrary(original);assert.equal(parseLibraryArchive(archive).length,1)
+  assert.deepEqual(importLibrary(destination,archive),{added:1,skipped:0});assert.deepEqual(readLibrary(destination),readLibrary(original))
+  assert.deepEqual(importLibrary(destination,archive),{added:0,skipped:1})
+  const conflict=JSON.parse(archive);conflict.entries[0].name='Conflicting name'
+  importLibrary(destination,JSON.stringify(conflict));const entries=readLibrary(destination)
+  assert.equal(entries.length,2);assert.notEqual(entries[0].id,saved.id);assert.equal(entries[1].name,'Portable')
+  assert.deepEqual(importLibrary(destination,JSON.stringify(conflict)),{added:0,skipped:1})
+})
+test('malformed, oversized, full and failed-storage imports never partially change a library',()=>{
+  const local=storage(),source=storage();saveExperiment(local,createWorld(),'Existing');saveExperiment(source,createWorld({seed:'incoming'}),'Incoming')
+  const archive=exportLibrary(source),before=local.getItem(LIBRARY_KEY)
+  for(const raw of ['broken','null','x'.repeat(2_000_001),JSON.stringify({version:2,entries:[{}]})]){assert.throws(()=>importLibrary(local,raw));assert.equal(local.getItem(LIBRARY_KEY),before)}
+  const denied={getItem:local.getItem,setItem(){throw Error('quota')}};assert.throws(()=>importLibrary(denied,archive),/could not be saved/);assert.equal(local.getItem(LIBRARY_KEY),before)
+  for(let i=1;i<6;i++)saveExperiment(local,createWorld({seed:`slot-${i}`}),`Slot ${i}`)
+  const full=local.getItem(LIBRARY_KEY);assert.throws(()=>importLibrary(local,archive),/needs 7 slots/);assert.equal(local.getItem(LIBRARY_KEY),full)
+})
+test('unreadable data can be backed up exactly and reset without touching unrelated preferences',()=>{
+  const local=storage();local.setItem(LIBRARY_KEY,'corrupt original');local.setItem('preferences','keep');local.setItem('evolving-minds:lab:v1','legacy original')
+  assert.equal(rawLibraryBackup(local),'corrupt original');resetUnreadableLibrary(local);assert.deepEqual(readLibrary(local),[])
+  assert.equal(local.getItem('preferences'),'keep');assert.equal(local.getItem('evolving-minds:lab:v1'),'legacy original')
+  assert.throws(()=>resetUnreadableLibrary(local),/readable again/)
+})

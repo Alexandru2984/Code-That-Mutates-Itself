@@ -111,3 +111,14 @@ fișierelor partajate; noul job a trecut și un transfer real upload/download.
 - Funcțiile noi sunt reale și au stări goale/erori, fără elemente decorative inactive.
 - Testele relevante, buildul și auditul de dependențe sunt raportate cu rezultatul real.
 - Se diferențiază explicit modificările comise de cele activate în producție.
+
+## Finalizare produs — continuarea din 2026-11-04
+
+- Bibliotecă portabilă: export/import integral, deduplicare, păstrarea ambelor
+  variante la coliziuni de ID, refuz atomic dacă sunt depășite cele șase sloturi.
+- Recuperare pentru date locale corupte, cu descărcarea originalului și resetare
+  explicită; experimentul deschis și celelalte preferințe rămân disponibile.
+- În lucru: laborator instalabil și utilizabil după reload fără internet, cu
+  stare offline clară și fără cache pentru admin, sesiuni sau lumea live.
+- Operare: a fost identificat Uptime Kuma existent; integrarea canalului de
+  notificare depinde de alegerea proprietarului, cerută separat.
