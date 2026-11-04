@@ -38,6 +38,12 @@ jobs:
         with:
           elixir-version: '1.18.3'
           otp-version: '27'
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        if: matrix.project == 'evolving_minds'
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: e2e/package-lock.json
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: |
@@ -63,7 +69,23 @@ jobs:
         run: |
           mix compile --warnings-as-errors
           mix assets.deploy
-          mix release
+          mix release --overwrite
       - name: Validate deployment scripts
         if: matrix.project == 'evolving_minds'
         run: bash -n ../deploy/*.sh
+      - name: Install browser verification dependencies
+        if: matrix.project == 'evolving_minds'
+        working-directory: e2e
+        run: npm ci --ignore-scripts
+      - name: Audit browser verification dependencies
+        if: matrix.project == 'evolving_minds'
+        working-directory: e2e
+        run: npm audit --audit-level=high
+      - name: Install Chromium for browser regressions
+        if: matrix.project == 'evolving_minds'
+        working-directory: e2e
+        run: npx playwright install --with-deps chromium
+      - name: Verify product flows and responsive layouts in Chromium
+        if: matrix.project == 'evolving_minds'
+        working-directory: e2e
+        run: npm test
