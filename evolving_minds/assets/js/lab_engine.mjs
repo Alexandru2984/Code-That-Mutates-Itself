@@ -76,3 +76,28 @@ export function stepWorld(world) {
   if(!world.entities.length)note(world,'Extinction. Change the conditions and try a new experiment.');
   world.history.push(summarize(world));if(world.history.length>120)world.history.shift();return world
 }
+
+export function restoreWorld(data) {
+  const invalid=()=>{throw new Error('This is not a valid version 1 experiment snapshot.')};
+  const int=(n,min=0,max=1_000_000_000)=>Number.isSafeInteger(n)&&n>=min&&n<=max;
+  const number=(n,min=0,max=1)=>Number.isFinite(n)&&n>=min&&n<=max;
+  const text=(s,max)=>typeof s==='string'&&s.length>0&&s.length<=max;
+  if(!data||data.version!==1||!data.config||!int(data.tick)||!int(data.rng,1,4294967295)||!int(data.nextId,1))invalid();
+  const c=data.config;
+  if(!text(c.seed,80)||!int(c.population,2,60)||!number(c.aggression)||!number(c.curiosity)||!number(c.mutation,0,.3)||!['normal','abundance','famine'].includes(c.epoch))invalid();
+  if(!Array.isArray(data.entities)||data.entities.length>60||!Array.isArray(data.history)||data.history.length<1||data.history.length>120||!Array.isArray(data.events)||data.events.length>10)invalid();
+  for(const key of ['births','deaths','attacks','cooperations','mutations'])if(!int(data[key]))invalid();
+  if(data.births-data.deaths!==data.entities.length)invalid();
+  const entities=data.entities.map(e=>{
+    if(!e||!int(e.id,1)||e.id>=data.nextId||!text(e.name,32)||!['solari','umbra'].includes(e.tribe)||!number(e.aggression)||!number(e.curiosity)||!number(e.energy,Number.MIN_VALUE,100)||!int(e.generation,1)||!int(e.born,0,data.tick)||(e.parentId!==null&&(!int(e.parentId,1)||e.parentId>=e.id)))invalid();
+    return {id:e.id,name:e.name,tribe:e.tribe,aggression:e.aggression,curiosity:e.curiosity,energy:e.energy,generation:e.generation,parentId:e.parentId,born:e.born}
+  });
+  if(new Set(entities.map(e=>e.id)).size!==entities.length)invalid();
+  let previous=-1;
+  const history=data.history.map(p=>{
+    if(!p||!int(p.tick,0,data.tick)||p.tick<previous||!int(p.population,0,60)||!int(p.energy,0,100)||!number(p.aggression)||!number(p.curiosity)||!int(p.generation)||!int(p.solari,0,60)||!int(p.umbra,0,60)||p.solari+p.umbra!==p.population)invalid();
+    previous=p.tick;return {tick:p.tick,population:p.population,energy:p.energy,aggression:p.aggression,curiosity:p.curiosity,generation:p.generation,solari:p.solari,umbra:p.umbra}
+  });
+  const events=data.events.map(e=>{if(!e||!int(e.tick,0,data.tick)||!text(e.text,240))invalid();return {tick:e.tick,text:e.text}});
+  return {version:1,config:{seed:c.seed,population:c.population,aggression:c.aggression,curiosity:c.curiosity,mutation:c.mutation,epoch:c.epoch},rng:data.rng,tick:data.tick,nextId:data.nextId,entities,births:data.births,deaths:data.deaths,attacks:data.attacks,cooperations:data.cooperations,mutations:data.mutations,events,history}
+}

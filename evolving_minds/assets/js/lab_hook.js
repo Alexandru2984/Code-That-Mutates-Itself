@@ -1,4 +1,4 @@
-import {createWorld,stepWorld,summarize,SCENARIOS} from './lab_engine.mjs'
+import {createWorld,stepWorld,summarize,restoreWorld,SCENARIOS} from './lab_engine.mjs'
 
 export const EvolutionLab = {
   mounted() {
@@ -8,10 +8,24 @@ export const EvolutionLab = {
     this.readConfig=()=>Object.fromEntries(new FormData(this.form));
     this.onSubmit=e=>{e.preventDefault();this.world=createWorld(this.readConfig());this.selected=null;this.running=false;this.elapsed=0;this.render()};
     this.form.addEventListener('submit',this.onSubmit);
+    this.notice=text=>{this.el.querySelector('[data-lab-notice]').textContent=text};
+    this.loadSnapshot=data=>{this.world=restoreWorld(data);this.running=false;this.elapsed=0;this.selected=null;for(const [key,value] of Object.entries(this.world.config)){if(this.form.elements[key])this.form.elements[key].value=value}this.render()};
+    this.onFile=async e=>{
+      const file=e.target.files?.[0];if(!file)return;
+      try{if(file.size>512000)throw Error('Snapshot files must be smaller than 500 KB.');this.loadSnapshot(JSON.parse(await file.text()));this.notice('Experiment imported and paused. Continue whenever you are ready.')}catch(error){this.notice(error instanceof SyntaxError?'This file is not valid JSON.':error.message)}
+      e.target.value='';
+    };
+    this.fileInput=this.el.querySelector('[data-import]');this.fileInput.addEventListener('change',this.onFile);
     this.onClick=e=>{
       const action=e.target.closest('[data-action]')?.dataset.action;
       if(action==='play'){if(this.world.entities.length)this.running=!this.running;this.render()}
       if(action==='step'){this.running=false;stepWorld(this.world);this.render()}
+      if(action==='save'){
+        try{localStorage.setItem('evolving-minds:lab:v1',JSON.stringify(this.world));this.notice('Experiment saved in this browser. You can leave and load it later.')}catch(_){this.notice('Browser storage is unavailable. Export the experiment to keep it.')}
+      }
+      if(action==='load'){
+        try{const raw=localStorage.getItem('evolving-minds:lab:v1');if(!raw){this.notice('No saved experiment in this browser yet.');return}this.loadSnapshot(JSON.parse(raw));this.notice('Saved experiment loaded and paused.')}catch(_){this.notice('The saved experiment could not be read. Import a valid JSON snapshot instead.')}
+      }
       if(action==='export'){
         const url=URL.createObjectURL(new Blob([JSON.stringify(this.world,null,2)],{type:'application/json'}));
         const link=document.createElement('a');link.href=url;link.download='evolving-minds-lab.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000)
@@ -37,7 +51,7 @@ export const EvolutionLab = {
     if(!this.world.entities.length)this.running=false;
     const stats=summarize(this.world);
     for(const el of this.el.querySelectorAll('[data-stat]'))el.textContent=stats[el.dataset.stat]??this.world[el.dataset.stat]??0;
-    const play=this.el.querySelector('[data-action=play]');play.textContent=this.running?'Ⅱ Pause experiment':'▶ Run experiment';play.setAttribute('aria-pressed',String(this.running));
+    const play=this.el.querySelector('[data-action=play]');play.disabled=this.world.entities.length===0;this.el.querySelector('[data-action=step]').disabled=this.world.entities.length===0;play.textContent=this.running?'Ⅱ Pause experiment':'▶ Run experiment';play.setAttribute('aria-pressed',String(this.running));
     for(const input of this.form.querySelectorAll('input[type=range]')){const output=input.closest('label')?.querySelector('output');if(output)output.textContent=input.name==='population'?input.value:`${Math.round(Number(input.value)*100)}%`}
     const ids=this.world.entities.map(e=>e.id).join(',');
     if(this.inspect.dataset.ids!==ids){this.inspect.replaceChildren(new Option('Choose a mind to inspect',''));for(const e of this.world.entities)this.inspect.add(new Option(`${e.name} · ${e.tribe} · Gen ${e.generation}`,e.id));this.inspect.dataset.ids=ids}
@@ -55,6 +69,6 @@ export const EvolutionLab = {
     this.el.querySelector('[data-extinct]').hidden=this.world.entities.length>0;
   },
   destroyed() {
-    this.destroyedFlag=true;cancelAnimationFrame(this.frame);this.resize.disconnect();this.el.removeEventListener('click',this.onClick);this.el.removeEventListener('input',this.onInput);this.form.removeEventListener('submit',this.onSubmit);this.canvas.removeEventListener('click',this.onCanvas);this.inspect.removeEventListener('change',this.onInspect);
+    this.destroyedFlag=true;cancelAnimationFrame(this.frame);this.resize.disconnect();this.el.removeEventListener('click',this.onClick);this.el.removeEventListener('input',this.onInput);this.form.removeEventListener('submit',this.onSubmit);this.canvas.removeEventListener('click',this.onCanvas);this.inspect.removeEventListener('change',this.onInspect);this.fileInput.removeEventListener('change',this.onFile);
   }
 }

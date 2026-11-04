@@ -23,3 +23,18 @@ test('malformed numeric input is bounded and an extinct world remains inspectabl
   assert.equal(world.config.population,2);assert.equal(world.config.aggression,0);assert.equal(world.config.curiosity,1);assert.equal(world.config.mutation,.3);assert.equal(world.config.epoch,'normal');
   world.entities=[];const tick=world.tick;stepWorld(world);assert.equal(world.tick,tick);assert.equal(summarize(world).population,0);
 });
+
+test('exported snapshots resume the same random stream without sharing mutable state',async()=>{
+  const {restoreWorld}=await import('./lab_engine.mjs');
+  const original=createWorld({...SCENARIOS.balanced,seed:'resume'});for(let i=0;i<30;i++)stepWorld(original);
+  const resumed=restoreWorld(JSON.parse(JSON.stringify(original)));assert.deepEqual(resumed,original);
+  for(let i=0;i<80;i++){stepWorld(original);stepWorld(resumed)}assert.deepEqual(resumed,original);
+  resumed.config.seed='different';assert.notEqual(original.config.seed,resumed.config.seed);
+});
+test('malformed, oversized and duplicate-identity snapshots are rejected without coercion',async()=>{
+  const {restoreWorld}=await import('./lab_engine.mjs');const source=createWorld();
+  for(const edit of [w=>{w.entities[0].energy=Infinity},w=>{w.entities[1].id=w.entities[0].id},w=>{w.config.aggression='0.5'},w=>{w.rng=0},w=>{w.version=2},w=>{w.history=Array(121).fill(w.history[0])},w=>{w.births=1}]){
+    const broken=structuredClone(source);edit(broken);assert.throws(()=>restoreWorld(broken),/valid version 1/);
+  }
+  const data=JSON.parse(JSON.stringify(source));data.__proto__={polluted:true};const loaded=restoreWorld(data);assert.equal(loaded.polluted,undefined);assert.equal({}.polluted,undefined);
+});

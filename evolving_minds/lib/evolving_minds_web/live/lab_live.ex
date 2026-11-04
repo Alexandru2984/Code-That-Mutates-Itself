@@ -37,6 +37,21 @@ defmodule EvolvingMindsWeb.LabLive do
           <div class="lab-scenarios" role="group" aria-label="Experiment presets">
             <button data-scenario="balanced"><strong>01 · A delicate balance</strong><span>Mixed personalities, normal resources.</span></button><button data-scenario="cooperation"><strong>02 · Better together</strong><span>Curious minds in a generous world.</span></button><button data-scenario="conflict"><strong>03 · Clash of strategies</strong><span>High aggression. Who survives?</span></button><button data-scenario="survival"><strong>04 · The long famine</strong><span>Scarce resources, rapid mutation.</span></button>
           </div>
+          <div class="lab-library">
+            <div>
+              <button data-action="save" class="button button-quiet">Save in browser</button><button
+                data-action="load"
+                class="button button-quiet"
+              >Load saved experiment</button><label class="button button-quiet lab-import-label">Import JSON<input
+                data-import
+                type="file"
+                accept="application/json,.json"
+                aria-label="Import experiment JSON snapshot"
+              /></label>
+            </div><p data-lab-notice class="muted" role="status">
+              Save a world here, or import an exported experiment to continue its story.
+            </p>
+          </div>
           <div class="lab-layout">
             <section class="panel lab-controls" aria-labelledby="controls-heading">
               <h2 id="controls-heading">Set the conditions</h2><form id="lab-config-form">
@@ -162,7 +177,7 @@ defmodule EvolvingMindsWeb.LabLive do
             <h2>How this model works</h2><p>
               Each step, minds meet one another and spend energy. Cooperation rewards curiosity; fights drain rivals. Energetic parents reproduce every two steps, passing on slightly changed traits. A world holds at most 60 minds. If none survive, the experiment ends.
             </p><p>
-              This sandbox uses a seeded random generator and a simplified economy. It is a learning tool, not a prediction of the shared world. Keep a seed and export your results to compare experiments. Experiments reset when you leave this page.
+              This sandbox uses a seeded random generator and a simplified economy. It is a learning tool, not a prediction of the shared world. Keep a seed and export your results to compare experiments. Save in this browser or export before leaving. Imported snapshots are validated before your current experiment is replaced.
             </p>
           </section>
         </div>
