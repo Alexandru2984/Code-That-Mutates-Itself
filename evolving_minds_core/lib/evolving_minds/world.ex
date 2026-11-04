@@ -56,6 +56,18 @@ defmodule EvolvingMinds.World do
 
   @paused_key {__MODULE__, :paused}
 
+  @doc "Terminates one living mind and records its fate in the history book."
+  def terminate_entity(id) do
+    with [{pid, _}] <- Registry.lookup(EvolvingMinds.EntityRegistry, id),
+         :ok <- GenServer.call(pid, :terminate_mind) do
+      :ok
+    else
+      _ -> {:error, :not_found}
+    end
+  catch
+    :exit, _ -> {:error, :not_found}
+  end
+
   @doc "Freezes the simulation: entities keep their timers but skip acting."
   def pause, do: :persistent_term.put(@paused_key, true)
 

@@ -63,12 +63,11 @@ defmodule EvolvingMindsWeb.AdminLive do
       when is_binary(id) and byte_size(id) <= 128 do
     id = String.trim(id)
 
-    case Registry.lookup(EvolvingMinds.EntityRegistry, id) do
-      [{pid, _}] ->
-        DynamicSupervisor.terminate_child(EvolvingMinds.EntitySupervisor, pid)
+    case World.terminate_entity(id) do
+      :ok ->
         {:noreply, socket |> put_flash(:info, "Mind #{id} terminated.") |> refresh()}
 
-      [] ->
+      {:error, :not_found} ->
         {:noreply, put_flash(socket, :error, "No living mind with id #{id}.")}
     end
   end

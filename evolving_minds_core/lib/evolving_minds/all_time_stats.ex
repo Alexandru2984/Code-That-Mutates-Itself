@@ -123,9 +123,9 @@ defmodule EvolvingMinds.AllTimeStats do
       |> Map.update(killer_id, %{name: killer_name, count: 1}, fn entry ->
         %{entry | name: killer_name || entry.name, count: entry.count + 1}
       end)
-      |> prune()
 
     entry = kills_by[killer_id]
+    kills_by = prune(kills_by)
 
     most_feared =
       case state.most_feared do
@@ -142,11 +142,10 @@ defmodule EvolvingMinds.AllTimeStats do
     children_by =
       state.children_by
       |> Map.update(parent_id, %{name: nil, count: 1}, &%{&1 | count: &1.count + 1})
-      |> prune()
 
     entry = children_by[parent_id]
     name = entry.name || lookup_name(parent_id)
-    children_by = Map.put(children_by, parent_id, %{entry | name: name})
+    children_by = children_by |> Map.put(parent_id, %{entry | name: name}) |> prune()
 
     most_prolific =
       case state.most_prolific do

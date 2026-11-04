@@ -54,6 +54,7 @@ defmodule EvolvingMinds.Entity do
     {:via, Registry, {EvolvingMinds.EntityRegistry, id}}
   end
 
+  @impl true
   def init(args) do
     id = Keyword.fetch!(args, :id)
 
@@ -95,7 +96,8 @@ defmodule EvolvingMinds.Entity do
       tribe: tribe,
       traits: traits,
       generation: generation,
-      parent_id: parent_id
+      parent_id: parent_id,
+      born_at: state.born_at
     })
 
     # Delay the first action slightly to allow the supervisor to settle
@@ -103,6 +105,13 @@ defmodule EvolvingMinds.Entity do
     {:ok, state}
   end
 
+  @impl true
+  def handle_call(:terminate_mind, _from, state) do
+    {:stop, :normal, state} = die(state, :terminated, nil)
+    {:stop, :normal, :ok, state}
+  end
+
+  @impl true
   def handle_cast({:message, type, sender_id}, state) do
     Memory.remember(state.id, {type, sender_id})
     Logger.debug("Entity #{state.id} received #{type} from #{sender_id}")
@@ -147,6 +156,7 @@ defmodule EvolvingMinds.Entity do
     {:noreply, new_state}
   end
 
+  @impl true
   def handle_info(:act, state) do
     if World.paused?() do
       # Frozen world: keep the heartbeat but change nothing.

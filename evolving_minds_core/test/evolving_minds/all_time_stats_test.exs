@@ -53,6 +53,39 @@ defmodule EvolvingMinds.AllTimeStatsTest do
     assert :ok = AllTimeStats.import(exported)
   end
 
+  test "pruning a new low-count entry cannot crash the all-time statistics" do
+    original = AllTimeStats.export()
+    on_exit(fn -> AllTimeStats.import(original) end)
+
+    for i <- 1..205 do
+      AllTimeStats.handle_telemetry(
+        [:evolving_minds, :entity, :spawn],
+        %{},
+        %{parent_id: "prune-parent-#{i}", generation: 1},
+        nil
+      )
+
+      AllTimeStats.handle_telemetry(
+        [:evolving_minds, :entity, :death],
+        %{},
+        %{
+          id: "prune-victim-#{i}",
+          cause: :killed,
+          killer_id: "prune-killer-#{i}",
+          killer_name: "Pruner",
+          age: 1
+        },
+        nil
+      )
+    end
+
+    stats = AllTimeStats.get_stats()
+    assert stats.births == original.births + 205
+    assert stats.deaths == original.deaths + 205
+    assert map_size(stats.kills_by) <= 200
+    assert map_size(stats.children_by) <= 200
+  end
+
   defp eventually(fun, attempts \\ 50) do
     cond do
       fun.() ->

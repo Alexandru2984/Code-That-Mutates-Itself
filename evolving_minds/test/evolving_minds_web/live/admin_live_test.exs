@@ -70,6 +70,13 @@ defmodule EvolvingMindsWeb.AdminLiveTest do
     assert html =~ "terminated"
     assert eventually(fn -> StateStore.get_state(id) == nil end)
 
+    assert eventually(fn ->
+             match?(
+               %{cause: :terminated, died_at: died} when is_integer(died),
+               EvolvingMinds.Ancestry.get(id)
+             )
+           end)
+
     # Unknown ids get a clear error.
     html =
       view

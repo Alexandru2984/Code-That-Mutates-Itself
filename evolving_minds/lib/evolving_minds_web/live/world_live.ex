@@ -403,7 +403,7 @@ defmodule EvolvingMindsWeb.WorldLive do
                 :abundance -> "Energy is plentiful. A chance to flourish."
                 _ -> "A delicate balance of risk and reward."
               end}
-            </p><span class="epoch-cost">{EvolvingMinds.Environment.act_cost()} energy per action</span>
+            </p><span class="epoch-cost">{Map.fetch!(%{normal: 5, abundance: 3, famine: 8}, @epoch)} energy per action</span>
           </div>
         </section>
         <section class="world-metrics" aria-label="World at a glance">

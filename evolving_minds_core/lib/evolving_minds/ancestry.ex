@@ -94,7 +94,7 @@ defmodule EvolvingMinds.Ancestry do
       tribe: metadata[:tribe],
       parent_id: metadata[:parent_id],
       generation: Map.get(metadata, :generation, 1),
-      born_at: System.system_time(:second),
+      born_at: Map.get(metadata, :born_at, System.system_time(:second)),
       died_at: nil,
       cause: nil,
       killer_id: nil
