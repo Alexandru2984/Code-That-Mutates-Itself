@@ -61,4 +61,68 @@ nu fac parte din acest audit al repository-ului.
 - Advisory-urile exacte sunt returnate de `mix hex.audit`; disponibilitatea unui
   patch și relevanța pentru aplicație se verifică la actualizare.
 
-Starea remedierilor și rezultatele verificărilor se completează la livrare.
+## Starea finală a remedierilor
+
+- SEC-01: Phoenix 1.7.24, LiveView 1.2.13, phoenix_html 3.3.5, Bandit 1.14.1,
+  hpax 1.1.0, Plug 1.20.3, plug_crypto 2.2.1 și lazy_html 0.1.14. Auditul Hex
+  final nu raportează pachete retrase sau advisories. Auditul npm al dependențelor
+  de verificare în browser raportează zero vulnerabilități.
+- SEC-02/07: sesiuni LiveView public/admin/dashboard distincte; dovadă semnată de
+  autorizare cu expirare, verificări la mount/evenimente și revocare la schimbarea
+  credențialelor. Comenzile malformate nu mai termină sesiunea.
+- SEC-03/04: ferestre comune pe instanță, identitate din IP prin proxy local de
+  încredere, bugete globale pentru acțiuni, plafon de 50 în DynamicSupervisor,
+  limită de 10 canale/transport și throttling pentru mounts/evenimente. Nginx
+  limitează cereri și conexiuni; rescrie header-ele de identitate.
+- SEC-05/08: Secure/HttpOnly/SameSite=Lax confirmate pe răspuns HTTPS; parsere fără
+  multipart, limite HTTP/WebSocket de 64 KiB; HTTP/2 dezactivat la backendul local.
+- SEC-06: ETF cu `:safe`, maximum 4 MB, ETF comprimat respins, validarea întregii
+  structuri înainte de restore; snapshot invalid oprește startupul în loc să fie
+  suprascris de o lume nouă. Fișier sincronizat pe disc, mod 0600 și rename atomic.
+- SEC-09: cheia din istoricul Git a fost schimbată direct în configurația protejată
+  și activată prin restart. Verificare criptografică pe un cookie emis de server:
+  cheia istorică este respinsă, cea runtime este acceptată. Secretul nu a fost
+  afișat sau comis. Obiectul istoric rămâne, cu o cheie revocată.
+- OPS-01/02: deploy separat de release-ul activ, snapshot final după oprire,
+  backup, readiness real și rollback. Prima migrare a demonstrat revenirea la
+  release-ul anterior când RPC-ul vechi nu a răspuns; următoarele deployuri au
+  trecut. systemd folosește SIGTERM pentru oprire și păstrează sandboxul existent.
+- Admin nu mai primește scriptul injectat de analytics și are CSP exclusiv pentru
+  scripturi/conexiuni proprii. Izolarea și funcționarea LiveDashboard au fost
+  verificate prin sesiune autenticată, fără comenzi care modifică lumea.
+- UX-01/02: observator nou, focus trap/Escape, mișcare redusă, formulare etichetate,
+  căutare extinsă, favorite, comparație, vizualizări și genealogie paginată.
+
+## Dovezi de verificare
+
+- 49 teste core, 52 teste web, 5 teste JavaScript și 5 teste Chromium: **111 trecute**.
+- Build de producție și mix release reușite; serviciul activ are readiness 200.
+- Pagini verificate la 360, 390, 768, 1440 și 1920 px; fără overflow orizontal.
+- Verificate în browser: favorite după reload, comparații/dosare, Escape/focus,
+  harta și rețeaua, sortarea DOM după actualizarea energiei, genealogia și laboratorul.
+- Laborator: seed/export reproductibil, save/load, import invalid respins fără a
+  schimba experimentul, reluare deterministă și pas individual fără conexiune.
+  Importul este local, limitat la 500 KB, cu schemă explicită și copiere doar a
+  câmpurilor permise. Datele importate sunt inserate prin textContent/Option.
+- HTTP public prin Cloudflare: `/`, `/tree`, `/lab`, `/healthz`, robots și sitemap
+  funcționale; admin anonim 401, `/.env` și `/.git/config` 403, snapshot public 404.
+- Backup local din 2026-11-04: checksum și gzip valide; pornire izolată reușită,
+  cu restaurarea a 7 minți și a registrului genealogic de 1.873 înregistrări.
+  Lumea live nu a fost înlocuită de acest exercițiu.
+- Nginx: configurație validată înainte de reload; numai acest vhost și configurația
+  sa specifică au fost modificate. Configurațiile anterioare sunt păstrate pentru rollback.
+
+## Riscuri și limite rămase
+
+| Prioritate | Limită reală | Următorul pas |
+| --- | --- | --- |
+| P1 | Backupul activ este pe același VPS. Nu protejează împotriva pierderii întregului server. | Copie externă, criptare/retentie și restaurare verificată pe alt host. |
+| P1 | Aplicația rulează încă drept `micu`, identitate folosită și de alte proiecte. Sandboxul limitează scrierile, dar nu înlocuiește izolarea identității. | Utilizator dedicat; migrare coerentă a permisiunilor release/date/env/backup. |
+| P1 | Readiness și loguri există, dar nu a fost conectat un serviciu extern de alertare. | Monitor și rută de alertare către proprietar, cu pragurile din runbook. |
+| P2 | Bugetele aplicației sunt locale unui nod, iar un atac distribuit poate ocoli limite per IP. | Buget distribuit la scalare, politici edge și teste de capacitate separate. |
+| P2 | Scannerul de secrete folosește tipare limitate. Istoricul cu cheia revocată nu a fost rescris. | Scanner dedicat și procedură separată pentru curățarea istoricului partajat, dacă este necesar. |
+
+Acesta este un audit al repository-ului și al integrării sale locale de producție.
+Nu reprezintă un pentest distructiv, o certificare sau un audit al întregului VPS,
+al tuturor celorlalte domenii ori al contului Cloudflare. Workflowul GitHub a fost
+configurat și verificat local; nu se afirmă că a rulat deja remote în această sesiune.

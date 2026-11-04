@@ -16,7 +16,11 @@ Behaviors are plain Elixir closures built from traits — the UI shows the equiv
 - **A persistent world**: the population, memories, epoch, and all-time records survive restarts and deploys via atomic snapshots.
 - **Hall of Fame**: births, deaths by cause, mutations, max generation, and the oldest mind ever — remembered forever.
 - **Mind Dossier**: click any card for lineage, age, full memory stream, and the heuristic source it runs.
-- **Visitor participation** (optional): rate-limited energy injections and mind-spawning for the public.
+- **Visitor participation** (optional): node-wide, per-IP energy and spawn budgets that survive tabs and reconnects, plus a hard population cap.
+- **Responsive observatory**: name/ID search, tribe and condition filters, rankings, trait map, interactive social network, trait and generation distributions.
+- **Personal exploration**: browser-persisted watchlists, three-mind comparisons, observation pause and shareable dossiers.
+- **Evolution Lab**: private seeded experiments with four scenarios, adjustable traits/environment, playback, inspection, local saving, safe JSON import and export.
+- **Search and sharing**: canonical metadata, sitemap, robots directives, and a social preview image.
 - **Crash-safe state**: a monitoring state store purges dead entities' state and memories no matter how they terminated.
 - **Real-time dashboard**: LiveView streams fed by a single PubSub snapshot broadcaster — per-tick cost is constant in connected browsers, and only changed cards ship over the wire.
 - **Admin god mode**: pause the world, force epochs, spawn or terminate minds, snapshot on demand, plus Phoenix LiveDashboard — all behind basic auth.
@@ -56,7 +60,7 @@ evolving_minds/        # the Phoenix LiveView app, depends on core via path
 
 ## ⚙️ Development
 
-Prerequisites: Elixir 1.14+ / OTP 25+ (CI runs 1.18 / OTP 27).
+The web application requires Elixir 1.15+; the tested production and CI toolchain is Elixir 1.18.3 / OTP 27. Node.js 24 is used for JavaScript and browser verification.
 
 ```bash
 cd evolving_minds
@@ -73,7 +77,27 @@ The dev server binds to `127.0.0.1` on purpose — on a remote machine, tunnel w
 (cd evolving_minds && mix test)
 ```
 
-Tests disable the Evolution Engine (`:start_evolution` config) so they run against a world they fully control. CI enforces `mix format --check-formatted`, `mix compile --warnings-as-errors`, and both test suites.
+Tests disable the Evolution Engine (`:start_evolution` config) so they control their world.
+CI checks formatting, compilation warnings, Elixir tests, dependency advisories,
+JavaScript simulation invariants, a production release, and real Chromium flows.
+GitHub Actions use pinned revisions and read-only repository permissions.
+
+```bash
+node --test evolving_minds/assets/js/lab_engine.test.mjs
+cd e2e
+npm ci --ignore-scripts
+npx playwright install chromium
+npm test
+```
+
+Browser fixtures bind only to loopback, require `MIX_ENV=test`, and explicitly disable
+persistence and evolution. They exercise responsive layouts, local watchlists,
+shared dossiers, live DOM ordering, genealogy, lab replay/export/import and offline
+stepping. They do not use the production snapshot. To use an existing compatible
+Chromium binary, set `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH`.
+
+Audit findings and residual risks are in [Security audit](docs/SECURITY_AUDIT.md);
+delivery stages and future work are in [Product plan](docs/PLAN.md).
 
 ## 🚀 Production
 

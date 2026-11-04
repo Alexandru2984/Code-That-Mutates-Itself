@@ -29,10 +29,33 @@ Fiecare etapă implementată are commit separat, fără coautori sau atribuire c
 instrumentele folosite. Testele de regresie relevante se execută odată cu fixul;
 extinderea infrastructurii CI și SEO rămâne la final.
 
+## Livrat în această sesiune
+
+| Etapă | Rezultat verificat |
+| --- | --- |
+| Audit | Inventar real al serviciului/proxyului, audit Hex și scanare a istoricului; cheia de semnare expusă a fost identificată și revocată. |
+| Securitate | Sesiuni admin separate, verificări la mount și evenimente, revocare, limite între taburi/conexiuni, plafon în motor, cookie Secure, payloaduri limitate și restore validat. Admin fără scripturi externe de analytics. |
+| Observator | Design nou adaptat mobilului, filtre combinate, favorite locale, comparație între trei minți, pauză a observației, dosare cu link direct și dialoguri accesibile din tastatură. |
+| Explorare | Hartă de trăsături, rețea socială interactivă, clasamente, distribuții, generații, jurnal filtrabil, genealogie cu căutare/paginare și export public JSON. Ordinea DOM urmează corect sortarea live. |
+| Laborator | Patru scenarii private, seed reproductibil, mediu/trăsături/mutații configurabile, viteză, pas individual, inspector, grafice și jurnal. Salvare locală, export și import JSON validat, cu reluarea generatorului aleator. |
+| Operare | Release-uri izolate, backup la deploy, oprire SIGTERM controlată, readiness, rollback și verificare HTTP publică. Backupul local existent a fost verificat și pornit într-o instanță izolată. |
+| SEO și CI | Canonical, metadate sociale, imagine de partajare, sitemap pentru cele trei pagini, robots și noindex pentru admin. Workflow cu SHA-uri fixe, privilegii minime, audituri, build de producție și teste Chromium. |
+
+Funcționalitățile sunt publicate pe `https://elixir.micutu.com`, inclusiv `/lab`.
+Workflowul GitHub este comis; rularea sa pe infrastructura GitHub are loc după
+sincronizarea repository-ului remote. Comenzile și testele au trecut local.
+
+## Următoarele priorități
+
+1. Backup verificat pe alt host/storage și exercițiu de recuperare după pierderea VPS-ului.
+2. Utilizator Unix dedicat aplicației, cu adaptarea release-urilor, permisiunilor și backupului.
+3. Alerte externe pentru readiness, snapshoturi vechi, restarturi și abuz de autentificare.
+4. Test de capacitate într-un mediu separat și bugete comune dacă se adaugă noduri BEAM.
+
 ## Extensii ulterioare, fără a le prezenta ca livrate
 
 - Replays și serii istorice persistente, cu retenție și buget de stocare.
-- Experimente private/sandbox și scenarii educaționale reproductibile.
+- Mai multe modele/scenarii educaționale și comparații între experimentele salvate.
 - Misiuni de observație și realizări locale, fără a altera lumea comună.
 - Povești despre dinastii, migrații și evoluția strategiilor între epoci.
 - Partajare de dosare cu imagini sociale generate din datele publice.

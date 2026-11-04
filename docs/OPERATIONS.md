@@ -35,6 +35,14 @@ After deploy check HTTPS `/`, `/tree`, `/healthz`, `/robots.txt`, `/sitemap.xml`
 an unauthenticated `/admin/world`, cookie flags, and an actual LiveView connection.
 Review recent unit logs for snapshot restore errors and restarts.
 
+Run `python3 deploy/verify-production.py` for repeatable public HTTP checks.
+It checks canonical metadata, security headers, cookie flags, readiness, discovery
+and protected paths, without credentials or world mutations. Browser flows are
+covered by `cd e2e && npm test`, against isolated fixtures with persistence disabled.
+
+Administrative pages have a separate CSP and receive no injected analytics script.
+The public analytics configuration remains restricted to the existing configured origins.
+
 ## Rollback
 
 1. Identify the previous directory reported by the deploy script; check it contains
@@ -76,3 +84,7 @@ Do not publish logs containing credentials, cookies, query tokens or environment
 values. There has been no destructive incident exercise on the live world in this
 session. Local backups and simulated restoration tests do not establish recovery
 from complete VPS loss; a separate host/storage restore exercise remains necessary.
+
+A real local backup was additionally booted in an isolated release on loopback
+port 4004 during this delivery, successfully restoring 7 minds. Production data
+was not replaced. This confirms that artifact's restore path, not off-host disaster recovery.
