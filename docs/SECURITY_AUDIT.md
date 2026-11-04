@@ -26,6 +26,7 @@ Nu s-au făcut teste de epuizare de resurse sau atacuri destructive în producț
 | SEC-06 | Medie, acces local necesar | binary_to_term fără :safe, fără limită de fișier/decompresie și fără validarea structurii. Un snapshot modificat/corupt poate provoca alocări sau crashuri la boot. Nu există upload public de snapshoturi. | Decodare sigură, limite, schemă și verificare completă înainte de restore. |
 | SEC-07 | Medie | Parametrii count și epoch sunt convertiți prin funcții care ridică excepții; evenimentele malformate pot termina sesiunea. | Allowlist și validare de tip/interval, răspuns controlat. |
 | SEC-08 | Medie | Parser multipart activ deși nu există uploaduri; limite implicite mari și socket fără limită explicită de payload. | Reducerea parserelor și limitelor, limite de transport. |
+| SEC-09 | Critică | Scanarea ulterioară a 335 de bloburi istorice a găsit fostul `evolving_minds/.env.prod`; SECRET_KEY_BASE de acolo coincide cu cheia runtime. Eliminarea fișierului în iunie nu a revocat cheia. Semnăturile sesiunilor și tokenurilor puteau fi falsificate de cineva cu acces la acel istoric. | Cheie nouă generată direct în fișierul protejat de runtime, fără afișare; activare la restartul controlat. Istoricul nu se rescrie implicit. Guard CI pentru fișiere de credențiale urmărite și tokenuri comune. |
 | OPS-01 | Ridicată pentru deploy | Scriptul și unitatea versionate indică vechiul director/serviciu, nu instalarea activă. Rularea lor ar putea crea un serviciu concurent sau eșua. | Deploy parametrizat pentru unitatea reală, verificări și backup înainte de restart. |
 | OPS-02 | Medie | /healthz întoarce mereu ok, chiar dacă procesele simulării lipsesc. | Readiness real, răspuns minimal și 503 la indisponibilitate. |
 | UX-01 | Produs | Header cu lățime minimă cumulată mare, texte de 7–9px, select fără etichete, dialoguri fără focus trap/Escape, lipsesc reconectare și accesibilitate pentru mișcare redusă. | Layout mobil și componente/feedback accesibile. |
@@ -37,7 +38,8 @@ HEEx escapează textul; euristicile sunt funcții construite din trăsături, f�
 CSRF și verificarea Origin există. ETS protejat, memorii/evenimente limitate,
 snapshot prin rename atomic și state store care curăță procesele terminate.
 Nu s-au găsit secrete în fișierele urmărite la inspecția inițială; aceasta nu
-înlocuiește un scanner al întregului istoric Git sau rotația secretelor compromise.
+acoperea istoricul. Scanarea ulterioară a istoricului a identificat SEC-09.
+Scanarea pe tipare este limitată și nu dovedește absența altor tipuri de secrete.
 
 ## Model de amenințări și limite
 

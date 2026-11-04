@@ -46,6 +46,8 @@ jobs:
           key: ${{ runner.os }}-otp27-elixir1.18-${{ matrix.project }}-${{ hashFiles('**/mix.lock') }}
       - run: mix deps.get --check-locked
       - run: mix hex.audit
+      - name: Check tracked credential files and token patterns
+        run: python3 ../deploy/check-tracked-secrets.py
       - run: mix format --check-formatted
       - run: mix compile --warnings-as-errors
       - run: mix test --warnings-as-errors
