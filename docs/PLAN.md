@@ -71,6 +71,12 @@ Obiectivele trebuie îndeplinite simultan, iar realizările sunt locale, fără 
 competitiv. Linkurile de partajare reproduc seedul și condițiile inițiale la pasul
 zero; exportul JSON păstrează în continuare starea curentă a experimentului.
 
+Dynasties prezintă familiile cu cei mai mulți membri vii și permite explorarea
+întregii descendențe păstrate, împreună cu filtrele existente. Ancestorii eliminați
+prin retenție sunt semnalați explicit. Rezolvarea rădăcinilor este memoizată,
+ciclurile vechi nu blochează pagina, iar structura arborelui se calculează o dată
+la încărcare/refresh în loc să fie reconstruită la fiecare căutare.
+
 ## Extensii ulterioare, fără a le prezenta ca livrate
 
 - Replays și serii istorice persistente, cu retenție și buget de stocare.

@@ -48,6 +48,29 @@ defmodule EvolvingMindsWeb.TreeLiveTest do
     assert html =~ "View full genealogy"
   end
 
+  test "family focus combines with filters and invalid identifiers leave it unchanged", %{
+    conn: conn
+  } do
+    parent = spawn_entity("FMPA", name: "FamilyRoot")
+    child = spawn_entity("FMCH", name: "FamilyHeir", parent_id: parent, generation: 2)
+    assert eventually(fn -> Ancestry.get(child) != nil end)
+    {:ok, view, _html} = live(conn, "/tree")
+    render_click(view, "focus_family", %{"id" => parent})
+    assert has_element?(view, ".family-focus", "FamilyRoot")
+    assert has_element?(view, ".ancestry-identity h3", "FamilyHeir")
+    render_click(view, "focus_family", %{"id" => "unknown"})
+    assert has_element?(view, ".family-focus", "FamilyRoot")
+
+    render_change(element(view, "#tree-filter-form"), %{
+      "filters" => %{"query" => "FamilyHeir", "life" => "all", "tribe" => "all"}
+    })
+
+    assert has_element?(view, ".ancestry-identity h3", "FamilyHeir")
+    refute has_element?(view, ".ancestry-identity h3", "FamilyRoot")
+    render_click(view, "clear_family", %{})
+    refute has_element?(view, ".family-focus")
+  end
+
   defp eventually(fun, attempts \\ 50) do
     cond do
       fun.() ->

@@ -39,3 +39,16 @@ test('social network links and genealogy search lead to real dossiers',async({pa
   await page.locator('#tree-search').fill('Aurelian');await expect(page.locator('.ancestry-row')).toHaveCount(1);
   await page.locator('.ancestry-row').getByRole('link',{name:'Aurelian',exact:true}).click();await expect(page.locator('#entity-detail')).toBeVisible();
 });
+
+
+test('dynasty summaries focus retained families and combine with genealogy filters',async({page},testInfo)=>{
+  await page.goto('/tree');await expect(page.locator('.dynasty-card')).toHaveCount(3);
+  await page.locator('.dynasty-card').first().getByRole('button',{name:'Explore this family',exact:false}).click();
+  await expect(page.locator('.family-focus')).toContainText('Showing the family');await expect(page.locator('.ancestry-row')).toHaveCount(1);
+  await page.locator('#tree-search').fill('not-present');await expect(page.locator('.ancestry-row')).toHaveCount(0);
+  await page.locator('#tree-search').fill('');await expect(page.locator('.ancestry-row')).toHaveCount(1);
+  await page.getByRole('button',{name:'Show all families',exact:true}).click();await expect(page.locator('.family-focus')).toHaveCount(0);
+  await expect(page.locator('.ancestry-row')).toHaveCount(8);
+  await page.setViewportSize({width:360,height:900});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  await page.locator('.dynasty-overview').screenshot({path:testInfo.outputPath('dynasties-mobile.png')});
+});

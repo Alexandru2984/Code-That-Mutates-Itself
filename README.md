@@ -15,6 +15,7 @@ Behaviors are plain Elixir closures built from traits — the UI shows the equiv
 - **Environmental epochs**: the world cycles through abundance, normal, and famine, changing how expensive it is to act.
 - **A persistent world**: the population, memories, epoch, and all-time records survive restarts and deploys via atomic snapshots.
 - **Hall of Fame**: births, deaths by cause, mutations, max generation, and the oldest mind ever — remembered forever.
+- **Dynasties**: rank retained families by living members, inspect generation records and focus a whole family while combining search, tribe and life filters. Pruned ancestors are marked explicitly.
 - **Mind Dossier**: click any card for lineage, age, full memory stream, and the heuristic source it runs.
 - **Visitor participation** (optional): node-wide, per-IP energy and spawn budgets that survive tabs and reconnects, plus a hard population cap.
 - **Responsive observatory**: name/ID search, tribe and condition filters, rankings, trait map, interactive social network, trait and generation distributions.

@@ -15,6 +15,7 @@ defmodule EvolvingMindsWeb.TreeLive do
        tribe: "all",
        view: "recent",
        page: 1,
+       family_id: nil,
        visitor_key: session["visitor_key"]
      )
      |> load(), layout: {EvolvingMindsWeb.Layouts, :screen}}
@@ -53,6 +54,16 @@ defmodule EvolvingMindsWeb.TreeLive do
     {:noreply, socket |> assign(:page, min(max(page, 1), socket.assigns.pages)) |> project()}
   end
 
+  def handle_event("focus_family", %{"id" => id}, socket)
+      when is_binary(id) and byte_size(id) <= 128 do
+    if Enum.any?(socket.assigns.families, &(&1.id == id)),
+      do: {:noreply, socket |> assign(family_id: id, page: 1) |> project()},
+      else: {:noreply, socket}
+  end
+
+  def handle_event("clear_family", _, socket),
+    do: {:noreply, socket |> assign(family_id: nil, page: 1) |> project()}
+
   def handle_event(_, _, socket), do: {:noreply, socket}
 
   defp load(socket) do
@@ -60,9 +71,18 @@ defmodule EvolvingMindsWeb.TreeLive do
     living = MapSet.new(World.get_all_entities())
     records = Enum.map(records, &Map.put(&1, :alive, MapSet.member?(living, &1.id)))
 
+    families = EvolvingMindsWeb.Dynasties.summarize(records)
+
+    family_id =
+      if Enum.any?(families, &(&1.id == socket.assigns.family_id)), do: socket.assigns.family_id
+
     socket
     |> assign(
       records: records,
+      recent_rows: records |> Enum.sort_by(& &1.born_at, :desc) |> Enum.map(&{&1, 0}),
+      family_rows: forest(records),
+      families: families,
+      family_id: family_id,
       total: length(records),
       alive: Enum.count(records, & &1.alive),
       names: Map.new(records, &{&1.id, &1.name}),
@@ -73,16 +93,18 @@ defmodule EvolvingMindsWeb.TreeLive do
 
   defp project(socket) do
     query = String.downcase(socket.assigns.query)
+    family = Enum.find(socket.assigns.families, &(&1.id == socket.assigns.family_id))
 
     rows =
       if socket.assigns.view == "family",
-        do: forest(socket.assigns.records),
-        else: socket.assigns.records |> Enum.sort_by(& &1.born_at, :desc) |> Enum.map(&{&1, 0})
+        do: socket.assigns.family_rows,
+        else: socket.assigns.recent_rows
 
     rows =
       Enum.filter(rows, fn {r, _} ->
-        (String.contains?(String.downcase(r.name || ""), query) or
-           String.contains?(String.downcase(r.id), query)) and
+        (is_nil(family) or MapSet.member?(family.member_ids, r.id)) and
+          (String.contains?(String.downcase(r.name || ""), query) or
+             String.contains?(String.downcase(r.id), query)) and
           (socket.assigns.tribe == "all" or to_string(r.tribe) == socket.assigns.tribe) and
           (socket.assigns.life == "all" or socket.assigns.life == "alive" == r.alive)
       end)
@@ -91,6 +113,7 @@ defmodule EvolvingMindsWeb.TreeLive do
     page = min(socket.assigns.page, pages)
 
     assign(socket,
+      family: family,
       rows: Enum.slice(rows, (page - 1) * @page_size, @page_size),
       matches: length(rows),
       pages: pages,
@@ -149,6 +172,41 @@ defmodule EvolvingMindsWeb.TreeLive do
             <span><strong>{@total}</strong> minds recorded</span><span><strong>{@alive}</strong> alive</span><span><strong>{@total -
               @alive}</strong>
             past lives</span>
+          </div>
+        </section>
+        <section :if={@families != []} class="dynasty-overview" aria-labelledby="families-heading">
+          <div class="section-heading">
+            <h2 id="families-heading">Living legacies</h2><span>{length(@families)} retained families</span>
+          </div>
+          <p class="muted">
+            Families with the most living members appear first. Counts include only the retained history, including each family's earliest known mind.
+          </p>
+          <div class="dynasty-grid">
+            <article :for={family <- Enum.take(@families, 3)} class="panel dynasty-card">
+              <p class="eyebrow">
+                {if family.alive > 0, do: "LIVING LINEAGE", else: "REMEMBERED LINEAGE"}
+              </p><h3>{family.name}</h3>
+              <dl>
+                <div>
+                  <dt>Living members</dt><dd>{family.alive}</dd>
+                </div><div>
+                  <dt>Recorded lives</dt><dd>{family.total}</dd>
+                </div><div>
+                  <dt>Highest generation</dt><dd>{family.max_generation}</dd>
+                </div>
+              </dl>
+              <p :if={family.incomplete} class="muted">
+                An earlier ancestor is no longer in the retained book.
+              </p><p :if={family.cyclic} class="muted">
+                A loop was found in this family's legacy records.
+              </p>
+              <button
+                class="button button-quiet"
+                phx-click="focus_family"
+                phx-value-id={family.id}
+                aria-pressed={to_string(@family_id == family.id)}
+              >Explore this family →</button>
+            </article>
           </div>
         </section>
         <section class="panel genealogy-panel" aria-labelledby="book-heading">
@@ -216,6 +274,12 @@ defmodule EvolvingMindsWeb.TreeLive do
               </option></select>
             </div>
           </form>
+          <div :if={@family} class="family-focus" role="status">
+            <p>
+              Showing the family of <strong>{@family.name}</strong>
+              · {@family.total} retained lives. Search and filters apply within this family.
+            </p><button phx-click="clear_family" class="text-button">Show all families</button>
+          </div>
           <div class="ancestry-rows">
             <article
               :for={{r, depth} <- @rows}
