@@ -39,6 +39,7 @@ defmodule EvolvingMindsWeb.Router do
     live_session :public, on_mount: [{EvolvingMindsWeb.PublicAccess, :throttle}] do
       live "/", WorldLive
       live "/tree", TreeLive
+      live "/lab", LabLive
     end
   end
 

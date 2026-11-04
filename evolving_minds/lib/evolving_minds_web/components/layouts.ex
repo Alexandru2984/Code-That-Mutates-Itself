@@ -14,15 +14,21 @@ defmodule EvolvingMindsWeb.Layouts do
 
   def metadata(conn) do
     base = EvolvingMindsWeb.Endpoint.url()
-    path = if conn.request_path == "/tree", do: "/tree", else: "/"
+    path = if conn.request_path in ["/tree", "/lab"], do: conn.request_path, else: "/"
 
     {title, description} =
-      if path == "/tree" do
-        {"Dynasties & Genealogy",
-         "Explore the ancestry of a living digital world. Follow parent-child lineages, discover tribes, and search the lives of autonomous minds."}
-      else
-        {"Live Artificial Life Observatory",
-         "Watch digital minds cooperate, compete, inherit traits and evolve. Explore a persistent artificial-life simulation with live traits, lineages, watchlists and comparisons."}
+      cond do
+        path == "/lab" ->
+          {"Evolution Lab",
+           "Run private, reproducible artificial-life experiments. Explore cooperation, conflict and famine with adjustable traits, seeded scenarios and downloadable results."}
+
+        path == "/tree" ->
+          {"Dynasties & Genealogy",
+           "Explore the ancestry of a living digital world. Follow parent-child lineages, discover tribes, and search the lives of autonomous minds."}
+
+        true ->
+          {"Live Artificial Life Observatory",
+           "Watch digital minds cooperate, compete, inherit traits and evolve. Explore a persistent artificial-life simulation with live traits, lineages, watchlists and comparisons."}
       end
 
     %{

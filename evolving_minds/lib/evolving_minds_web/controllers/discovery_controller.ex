@@ -24,7 +24,7 @@ defmodule EvolvingMindsWeb.DiscoveryController do
     |> put_resp_header("cache-control", "public, max-age=3600")
     |> send_resp(
       200,
-      "<?xml version=\"1.0\" encoding=\"UTF-8\"?><urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\"><url><loc>#{base}/</loc></url><url><loc>#{base}/tree</loc></url></urlset>"
+      "<?xml version=\"1.0\" encoding=\"UTF-8\"?><urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\"><url><loc>#{base}/</loc></url><url><loc>#{base}/tree</loc></url><url><loc>#{base}/lab</loc></url></urlset>"
     )
   end
 end

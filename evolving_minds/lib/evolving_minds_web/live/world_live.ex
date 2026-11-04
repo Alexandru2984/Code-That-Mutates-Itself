@@ -379,7 +379,8 @@ defmodule EvolvingMindsWeb.WorldLive do
           aria-hidden="true"
         >◎</span><span>Evolving <strong>Minds</strong><small>THE LIVING OBSERVATORY</small></span></a>
         <nav aria-label="Main navigation">
-          <a href="#explore" class="nav-active">Observatory</a><.link navigate={~p"/tree"}>Dynasties</.link><button phx-click="toggle_about">Field guide
+          <a href="#explore" class="nav-active">Observatory</a><.link navigate={~p"/tree"}>Dynasties</.link>
+          <.link navigate={~p"/lab"}>Lab</.link><button phx-click="toggle_about">Field guide
           <span aria-hidden="true">↗</span></button>
         </nav>
         <span class="connection-state"><i aria-hidden="true"></i><span class="when-connected">Live world</span><span class="when-disconnected">Reconnecting…</span></span>

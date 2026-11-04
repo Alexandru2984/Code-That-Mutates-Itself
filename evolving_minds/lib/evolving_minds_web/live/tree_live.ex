@@ -138,6 +138,7 @@ defmodule EvolvingMindsWeb.TreeLive do
           aria-hidden="true"
         >◎</span><span>Evolving <strong>Minds</strong><small>THE LIVING OBSERVATORY</small></span></a><nav aria-label="Main navigation">
           <.link navigate={~p"/"}>Observatory</.link><.link navigate={~p"/tree"} class="nav-active">Dynasties</.link>
+          <.link navigate={~p"/lab"}>Evolution Lab</.link>
         </nav><span class="connection-state"><i></i>Ancestry book</span>
       </header>
       <main id="main-content" class="observatory-main tree-main">
