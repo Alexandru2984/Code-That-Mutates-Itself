@@ -13,18 +13,26 @@ TIMER=evolving-minds-offsite.timer
 exec 9>"$ENV_DIR/.offsite-setup.lock"
 flock -n 9 || { echo 'Another offsite setup is running' >&2; exit 1; }
 checkpoint="$(mktemp -d "$ENV_DIR/offsite-setup.XXXXXX")"
+enabled="$(systemctl is-enabled "$TIMER" 2>/dev/null || true)"
 active=false
 if systemctl is-active --quiet "$TIMER"; then active=true; fi
-for item in "$ENV_DIR/backup-rclone.conf" /etc/systemd/system/"$SERVICE" /etc/systemd/system/"$TIMER" /usr/local/sbin/evolving-minds-offsite-backup; do
-  if [[ -f "$item" ]]; then cp -a "$item" "$checkpoint/$(basename "$item")"; fi
+managed_files=("$ENV_DIR/backup-rclone.conf" /etc/systemd/system/"$SERVICE" /etc/systemd/system/"$TIMER" /usr/local/sbin/evolving-minds-offsite-backup)
+for item in "${managed_files[@]}"; do
+  if [[ -e "$item" || -L "$item" ]]; then cp -a "$item" "$checkpoint/$(basename "$item")"; fi
 done
 rollback() {
   trap - ERR
   systemctl stop "$SERVICE" "$TIMER" || true
-  for item in "$ENV_DIR/backup-rclone.conf" /etc/systemd/system/"$SERVICE" /etc/systemd/system/"$TIMER" /usr/local/sbin/evolving-minds-offsite-backup; do
-    if [[ -f "$checkpoint/$(basename "$item")" ]]; then cp -a "$checkpoint/$(basename "$item")" "$item"; fi
+  systemctl disable "$TIMER" 2>/dev/null || true
+  for item in "${managed_files[@]}"; do
+    saved="$checkpoint/$(basename "$item")"
+    if [[ -e "$saved" || -L "$saved" ]]; then cp -a "$saved" "$item"; else rm -f -- "$item"; fi
   done
   systemctl daemon-reload
+  case "$enabled" in
+    enabled) systemctl enable "$TIMER" || true ;;
+    enabled-runtime) systemctl enable --runtime "$TIMER" || true ;;
+  esac
   if "$active"; then systemctl start "$TIMER" || true; fi
   echo "Offsite setup failed; previous configuration restored from $checkpoint" >&2
   exit 1
