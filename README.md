@@ -16,7 +16,7 @@ Behaviors are plain Elixir closures built from traits — the UI shows the equiv
 - **A persistent world**: the population, memories, epoch, and all-time records survive restarts and deploys via atomic snapshots.
 - **Hall of Fame**: births, deaths by cause, mutations, max generation, and the oldest mind ever — remembered forever.
 - **Dynasties**: rank retained families by living members, inspect generation records and focus a whole family while combining search, tribe and life filters. Pruned ancestors are marked explicitly.
-- **Mind Dossier**: click any card for lineage, age, full memory stream, and the heuristic source it runs.
+- **Mind Dossier**: click any card for lineage, age, retained memory stream, and the heuristic source it runs.
 - **Visitor participation** (optional): node-wide, per-IP energy and spawn budgets that survive tabs and reconnects, plus a hard population cap.
 - **Responsive observatory**: name/ID search, tribe and condition filters, rankings, trait map, interactive social network, trait and generation distributions.
 - **Personal exploration**: browser-persisted watchlists, three-mind comparisons, observation pause and shareable dossiers.
@@ -87,7 +87,7 @@ CI checks formatting, compilation warnings, Elixir tests, dependency advisories,
 JavaScript simulation invariants, a production release, and real Chromium flows.
 GitHub Actions use pinned revisions and read-only repository permissions. Browser
 screenshots, accessibility reports and failure traces are retained as CI artifacts
-for seven days. Automated accessibility checks cover four pages at mobile/desktop
+for seven days. Automated accessibility checks cover five pages at mobile/desktop
 widths plus maps, networks, rankings, dossiers and the guide. Gradients and icon-only
 labels still require human review; automated results do not establish WCAG conformance.
 

@@ -111,7 +111,7 @@ destinația remote aleasă de proprietar a fost testată ulterior într-o instan
 
 ## Dovezi de verificare
 
-- 49 teste core, 61 teste web, 14 teste JavaScript, 6 teste Python și 11 teste Chromium: **141 trecute**.
+- 49 teste core, 64 teste web, 25 teste JavaScript, 6 teste Python și 20 teste Chromium: **164 trecute**.
   Fluxurile laboratorului au fost reverificate după ajustarea comparațiilor.
 - Build de producție și mix release reușite; serviciul activ are readiness 200.
 - Pagini verificate la 360, 390, 768, 1440 și 1920 px; fără overflow orizontal.
@@ -128,7 +128,7 @@ destinația remote aleasă de proprietar a fost testată ulterior într-o instan
   încredere pentru competiții. Linkurile validate reproduc numai condițiile inițiale.
 - Accesibilitate: eticheta logo-ului și semantica barei pe triburi corectate;
   pictogramele butoanelor etichetate sunt decorative pentru cititoarele de ecran.
-  Scanări axe-core pentru 13 combinații de pagină/stare/lățime fără erori automate
+  Scanări axe-core pentru 15 combinații de pagină/stare/lățime fără erori automate
   detectabile. Contrastul peste gradiente și unele pictograme cer verificare umană;
   acest rezultat nu reprezintă o certificare WCAG. Navigarea prin Tab/skip link,
   focusul și Escape au fost verificate separat.
@@ -157,6 +157,32 @@ destinația remote aleasă de proprietar a fost testată ulterior într-o instan
   Lumea live nu a fost înlocuită de acest exercițiu.
 - Nginx: configurație validată înainte de reload; numai acest vhost și configurația
   sa specifică au fost modificate. Configurațiile anterioare sunt păstrate pentru rollback.
+
+## Verificări suplimentare pentru laboratorul finalizat
+
+- `/lab` rulează direct în browser și nu emite sesiune de aplicație sau bootstrap
+  LiveView. Shellul offline este identic între cereri fără stare de vizitator.
+  Laboratorul și shellul au CSP strict și nu primesc transformarea de analytics.
+- CacheStorage are o listă de șapte resurse publice, verificată în Chromium după
+  cereri reale spre admin/API și după reload offline. Nici HTML-ul live, nici datele
+  API nu sunt salvate de worker. Inputul cache-ului omite credențiale, impune tipul,
+  versiunea, 1 MB/fișier și un timeout de 15 secunde. Tokenurile în HTML sunt respinse.
+- Politica no-cache pentru vechiul worker .js era rescrisă de Cloudflare la patru
+  ore. Endpointul canonic fără extensie, cu versiune și directive no-store pentru
+  browser/CDN, a fost verificat pe domeniul real. Nu s-au modificat regulile globale
+  Cloudflare sau vhosturile altor aplicații.
+- Bibliotecile se importă prin merge validat, atomic, cu deduplicare și fără a
+  înlocui salvările existente. Coliziunile de ID primesc identități noi. Resetarea
+  datelor corupte cere acțiune explicită și permite întâi descărcarea originalului.
+- Recuperarea la reload este separată per tab, cu schemă și dimensiune limitate.
+  Datele corupte sunt păstrate; quota/accesul blocat nu opresc simulatorul. Un update
+  real de worker a fost testat cu checkpoint și restaurarea experimentului în pauză.
+- Inspectorul de istoric nu schimbă starea experimentului. Pașii duplicați sunt
+  respinși pentru a evita selectarea unor măsurători ambigue. Selectorul temporal,
+  graficele și layoutul mobil au trecut testele de regresie și inspecția capturilor.
+- Uptime Kuma existent a fost inspectat read-only pentru acest domeniu: nu exista
+  un monitor al aplicației. Canalul de notificare a fost cerut proprietarului și
+  rămâne neales; nu se afirmă că alertele externe sunt active.
 
 ## Riscuri și limite rămase
 

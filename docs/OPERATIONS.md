@@ -42,12 +42,17 @@ site file. Back up existing files first. Run `sudo nginx -t` before reloading;
 restore the copies if validation fails. Preserve the shared Cloudflare real_ip
 configuration and origin allowlist. Do not modify other domains.
 
-After deploy check HTTPS `/`, `/tree`, `/healthz`, `/robots.txt`, `/sitemap.xml`,
+After deploy check HTTPS `/`, `/tree`, `/lab`, `/offline`, `/healthz`, `/robots.txt`, `/sitemap.xml`,
 an unauthenticated `/admin/world`, cookie flags, and an actual LiveView connection.
-Review recent unit logs for snapshot restore errors and restarts.
+Review recent unit logs for snapshot restore errors and restarts. Verify that the
+lab has no app session cookie or CSRF/LiveView token and that an offline preparation
+and reload works through the public hostname. Check `/service-worker` has no-store
+at Cloudflare, not just at the origin: the original .js endpoint was observed with
+a rewritten four-hour browser TTL. The canonical versioned endpoint now uses
+browser and CDN no-store controls. The legacy .js route is not used by new setups.
 
 Run `python3 deploy/verify-production.py` for repeatable public HTTP checks.
-It checks canonical metadata, security headers, cookie flags, readiness, discovery
+It checks canonical metadata, security headers, cookie flags on live pages, stateless lab documents, worker/manifest contracts, readiness, discovery
 and protected paths, without credentials or world mutations. Browser flows are
 covered by `cd e2e && npm test`, against isolated fixtures with persistence disabled.
 
