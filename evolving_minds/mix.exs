@@ -43,7 +43,7 @@ defmodule EvolvingMinds.MixProject do
   defp deps do
     [
       {:evolving_minds_core, path: "../evolving_minds_core"},
-      {:phoenix, "~> 1.7.14"},
+      {:phoenix, "~> 1.8.16"},
       {:phoenix_html, "~> 3.3"},
       {:phoenix_live_reload, "~> 1.2", only: :dev},
       {:phoenix_live_view, "~> 1.0"},
